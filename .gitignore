@@ -1,0 +1,24 @@
+# Runtime
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent private data
+workspace/memory/*.md
+workspace/MEMORY.md
+!.gitkeep
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Cache
+.aider.tags.cache.v4/
+.repomap.tags.cache.v1/
