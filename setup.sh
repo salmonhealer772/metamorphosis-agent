@@ -582,6 +582,9 @@ function deploy_scripts() {
     mkdir -p "$HOME/.openclaw/tools"
     cp "$REPO_DIR/scripts/repomap" "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
     chmod +x "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
+    # Symlink into ~/.local/bin so it's on PATH (same pattern as ov.py)
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$HOME/.openclaw/tools/repomap" "$HOME/.local/bin/repomap" 2>/dev/null || true
 
     # Install aider-chat (repomap dependency)
     if python3 -c "import aider" 2>/dev/null; then
