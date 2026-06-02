@@ -276,7 +276,8 @@ function bootstrap_pip() {
         return
     fi
 
-    pretty_print "No pip available. Install python3-pip manually and re-run." "${fg_red}"
+    pretty_print "No pip available after trying: apt, pip.pyz, and venv." "${fg_red}"
+    pretty_print "Install python3-pip with: sudo apt install python3-pip" "${fg_red}"
     exit 1
 }
 
@@ -303,6 +304,7 @@ function install_openviking_pkg() {
     else
         pretty_print "openviking install failed" "${fg_yellow}"
         pretty_print "  Try: $PIP_INSTALL openviking" "${fg_yellow}"
+        pretty_print "  Continuing without vector memory." "${fg_yellow}"
     fi
 
     mkdir -p "$HOME/.openclaw/workspace/.openviking"
@@ -452,7 +454,13 @@ function setup_vector_memory() {
             if ollama pull all-minilm 2>&1; then
                 pretty_print "Embedding model ready"
             else
-                pretty_print "Pull failed — run 'ollama pull all-minilm' later" "${fg_yellow}"
+                pretty_print "First pull failed — retrying…" "${fg_yellow}"
+                sleep 3
+                if ollama pull all-minilm 2>&1; then
+                    pretty_print "Embedding model ready (retry)"
+                else
+                    pretty_print "Pull failed — run ollama pull all-minilm later" "${fg_yellow}"
+                fi
             fi
         else
             pretty_print "Ollama not reachable" "${fg_yellow}"
@@ -553,6 +561,13 @@ function setup_searxng() {
         $PIP_INSTALL -e . 2>&1 || pretty_print "SearXNG install had issues" "${fg_yellow}"
     fi
 
+    # Verify SearXNG is importable
+    if python3 -c "import searx" 2>/dev/null; then
+        pretty_print "SearXNG import verified"
+    else
+        pretty_print "SearXNG install may need reinstall" "${fg_yellow}"
+    fi
+
     mkdir -p "$searxng_conf_dir"
     local searxng_secret
     searxng_secret=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
@@ -610,6 +625,11 @@ function clone_repo_into_workspace() {
             pretty_print "Repo cloned" || \
             pretty_print "Repo clone failed — agent can still function without it" "${fg_yellow}"
     fi
+
+    # Verify clone
+    if [[ -d "$workspace_target/metamorphosis-agent/.git" ]]; then
+        pretty_print "Repo clone verified"
+    fi
 }
 
 # ---- DESC: Bootstrap OpenClaw configuration ----------------------------------
@@ -657,4 +677,6 @@ function main() {
     openclaw
 }
 
-main "$@"
+if ! (return 0 2> /dev/null); then
+    main "$@"
+fi
