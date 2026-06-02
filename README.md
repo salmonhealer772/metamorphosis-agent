@@ -65,7 +65,7 @@ anything that's down:
 
 Ask "how do you feel?" and it runs a live scan of Ollama, OpenViking, embeddings
 model, disk space, RepoMap, and SearXNG — then reports structured status for
-each. No poetry about body parts.
+each. It reads health-state.json and reports actual service statuses — this is part of its identity in SOUL.md, not a checklist task.
 
 ## Memory — cross-session, persistent
 
