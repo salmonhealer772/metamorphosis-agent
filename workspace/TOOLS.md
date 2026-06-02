@@ -11,14 +11,12 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 ## SearXNG (Private Search Engine)
 
 - **URL:** http://127.0.0.1:8888
-- **Location:** `~/searxng/`
-- **Start:** `~/searxng/start.sh`
-- **Stop:** `~/searxng/stop.sh`
-- **Log:** `/tmp/searxng.log`
-- **Config:** `~/searxng/searx/settings.yml`
+- **Clone:** `~/searxng/`
+- **Config:** `~/.config/searxng/settings.yml` (set via `SEARXNG_SETTINGS_PATH`)
+- **Log:** `/tmp/searxng_web.log`
 - **API:** `http://127.0.0.1:8888/search?q=<query>&format=json`
-- **Setup:** Git clone from github.com/searxng/searxng, pip install --user
-- **Status:** Configured in setup.sh
+- **Setup:** Installed and configured by setup.sh
+- **Restart:** `pkill -f searx.webapp; cd ~/searxng && SEARXNG_SETTINGS_PATH=~/.config/searxng/settings.yml nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &`
 
 ---
 

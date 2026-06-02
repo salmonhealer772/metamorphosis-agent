@@ -240,22 +240,68 @@ echo -e "  ${DIM}  ${CYAN}python3 ov.py status${NC}       — health"
 echo ""
 echo -e "${BOLD}→ Private Search (SearXNG)${NC}"
 echo -e "  ${DIM}Self-hosted search engine. No Google tracking.${NC}"
-if [ ! -d "$HOME/searxng" ]; then
-  info "Installing SearXNG…"
-  # Install via pip (no sudo)
-  git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>/dev/null || warn "Clone failed"
-  cd "$HOME/searxng"
-  if [ -f /tmp/pip.pyz ]; then
-    python3 /tmp/pip.pyz install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
-  else
-    python3 -m pip install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+
+SEARXNG_PORT=8888
+SEARXNG_CONF_DIR="$HOME/.config/searxng"
+
+# Check if already running
+if curl -sf "http://127.0.0.1:$SEARXNG_PORT/search?q=health" >/dev/null 2>&1; then
+  ok "SearXNG already running on http://127.0.0.1:$SEARXNG_PORT"
+else
+  if [ ! -d "$HOME/searxng" ]; then
+    info "Installing SearXNG…"
+    git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>/dev/null || {
+      warn "SearXNG clone failed — skipping"
+      cd "$START_DIR" 2>/dev/null || true
+      warn "SearXNG not available — agent will use web_search instead"
+    }
   fi
-  cd "$START_DIR" 2>/dev/null || true
+
+  if [ -d "$HOME/searxng" ]; then
+    cd "$HOME/searxng"
+    if python3 -c "import searx" 2>/dev/null; then
+      ok "SearXNG already installed"
+    else
+      info "Installing SearXNG Python package…"
+      if [ -f /tmp/pip.pyz ]; then
+        python3 /tmp/pip.pyz install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+      else
+        python3 -m pip install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+      fi
+    fi
+
+    # Create config with proper bind_address and port
+    mkdir -p "$SEARXNG_CONF_DIR"
+    SEARXNG_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+    cat > "$SEARXNG_CONF_DIR/settings.yml" << SEARXNG_CONF
+use_default_settings: true
+server:
+  secret_key: "$SEARXNG_SECRET"
+  bind_address: "127.0.0.1"
+  port: $SEARXNG_PORT
+SEARXNG_CONF
+
+    # Kill any stale SearXNG from previous runs
+    pkill -f "searx.webapp" 2>/dev/null || true
+    sleep 1
+
+    # Start SearXNG with our config
+    info "Starting SearXNG…"
+    export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
+    nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
+    cd "$START_DIR" 2>/dev/null || true
+
+    # Wait for port to actually be listening (up to 20s)
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 2
+      if curl -sf "http://127.0.0.1:$SEARXNG_PORT" >/dev/null 2>&1; then
+        ok "SearXNG running on http://127.0.0.1:$SEARXNG_PORT"
+        break
+      fi
+      [ "$i" -eq 10 ] && warn "SearXNG failed to start — check /tmp/searxng_web.log"
+    done
+  fi
 fi
-# Start SearXNG in background
-nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
-cd "$START_DIR" 2>/dev/null || true
-ok "SearXNG running on http://127.0.0.1:8888"
 
 # ── Copy scripts ──────────────────────────────────────────────────
 mkdir -p "$HOME/scripts"
