@@ -309,42 +309,42 @@ echo -e "  ${DIM}  ${CYAN}python3 ov.py status${NC}       — health"
 echo ""
 echo -e "${BOLD}→ Private Search (SearXNG)${NC}"
 echo -e "  ${DIM}Self-hosted search engine. No Google tracking.${NC}"
+echo -e "  ${DIM}Installed on demand — start with ~/scripts/start-searxng.sh${NC}"
 
 SEARXNG_PORT=8888
 SEARXNG_CONF_DIR="$HOME/.config/searxng"
 
-if curl -sf "http://127.0.0.1:$SEARXNG_PORT/search?q=health" >/dev/null 2>&1; then
-  ok "SearXNG already running on http://127.0.0.1:$SEARXNG_PORT"
-else
-  if [ ! -d "$HOME/searxng" ]; then
-    info "Cloning SearXNG…"
-    git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>&1 || {
-      warn "SearXNG clone failed — skipping search setup"
-      cd "$START_DIR" 2>/dev/null || true
-    }
+if [ ! -d "$HOME/searxng" ]; then
+  info "Cloning SearXNG…"
+  git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>&1 || {
+    warn "SearXNG clone failed — skipping"
+    cd "$START_DIR" 2>/dev/null || true
+  }
+fi
+
+if [ -d "$HOME/searxng" ]; then
+  cd "$HOME/searxng"
+
+  # Install msgspec FIRST — SearXNG imports it at module level,
+  # so pip needs it to build the editable install.
+  if python3 -c "import msgspec" 2>/dev/null; then
+    ok "msgspec already installed"
+  else
+    info "Installing msgspec (required by SearXNG build)…"
+    $PIP_INSTALL msgspec -q 2>&1 || warn "msgspec install failed"
   fi
 
-  if [ -d "$HOME/searxng" ]; then
-    cd "$HOME/searxng"
-    # Install msgspec FIRST — SearXNG imports it at module level,
-    # so pip needs it just to build the editable install (-e .)
-    if python3 -c "import msgspec" 2>/dev/null; then
-      ok "msgspec already installed"
-    else
-      info "Installing msgspec (required by SearXNG build)…"
-      $PIP_INSTALL msgspec -q 2>&1 || warn "msgspec install failed"
-    fi
+  if python3 -c "import searx" 2>/dev/null; then
+    ok "SearXNG already installed"
+  else
+    info "Installing SearXNG Python package…"
+    $PIP_INSTALL -e . 2>&1 || warn "SearXNG install had issues"
+  fi
 
-    if python3 -c "import searx" 2>/dev/null; then
-      ok "SearXNG already installed"
-    else
-      info "Installing SearXNG Python package…"
-      $PIP_INSTALL -e . 2>&1 || warn "SearXNG install had issues"
-    fi
-
-    mkdir -p "$SEARXNG_CONF_DIR"
-    SEARXNG_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
-    cat > "$SEARXNG_CONF_DIR/settings.yml" << SEARXNG_CONF
+  # Write config (does not start the service)
+  mkdir -p "$SEARXNG_CONF_DIR"
+  SEARXNG_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+  cat > "$SEARXNG_CONF_DIR/settings.yml" << SEARXNG_CONF
 use_default_settings: true
 server:
   secret_key: "$SEARXNG_SECRET"
@@ -352,30 +352,10 @@ server:
   port: $SEARXNG_PORT
 SEARXNG_CONF
 
-    pkill -f "searx.webapp" 2>/dev/null || true
-    sleep 1
-
-    # Clear old log so failure tail shows fresh error
-    rm -f /tmp/searxng_web.log 2>/dev/null || true
-
-    info "Starting SearXNG…"
-    export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
-    nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
-    cd "$START_DIR" 2>/dev/null || true
-
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-      sleep 2
-      if curl -sf "http://127.0.0.1:$SEARXNG_PORT" >/dev/null 2>&1; then
-        ok "SearXNG running on http://127.0.0.1:$SEARXNG_PORT"
-        break
-      fi
-      if [ "$i" -eq 10 ]; then
-        warn "SearXNG failed to start after 20s"
-        warn "  Check /tmp/searxng_web.log for details"
-        tail -5 /tmp/searxng_web.log 2>/dev/null
-      fi
-    done
-  fi
+  ok "SearXNG configured at $SEARXNG_CONF_DIR/settings.yml"
+  info "Start: ~/scripts/start-searxng.sh"
+  info "Stop:  ~/scripts/stop-searxng.sh"
+  cd "$START_DIR" 2>/dev/null || true
 fi
 
 # ── Copy scripts ──────────────────────────────────────────────────

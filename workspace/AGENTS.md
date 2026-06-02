@@ -170,6 +170,8 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
+**🔍 SearXNG (Private Search):** Installed but not running by default. Before searching the web: run `~/scripts/start-searxng.sh`. After you're done: run `~/scripts/stop-searxng.sh`. Don't leave it running idle.
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**
