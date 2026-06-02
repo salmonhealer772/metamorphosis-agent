@@ -108,7 +108,7 @@ The agent has two behavioral guardrails:
 
 Self-hosted search engine at `localhost:8888`. No Google, no tracking.
 
-SearXNG is installed and configured during setup but does not auto-start.
+SearXNG is installed, configured, and auto-starts during setup.
 Run `~/scripts/start-searxng.sh` when you need it, `~/scripts/stop-searxng.sh`
 when you're done. The agent knows to manage this lifecycle on its own — it
 starts the service before searching and stops it after.

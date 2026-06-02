@@ -15,10 +15,10 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 - **Config:** `~/.config/searxng/settings.yml` (set via `SEARXNG_SETTINGS_PATH`)
 - **Log:** `/tmp/searxng_web.log`
 - **API:** `http://127.0.0.1:8888/search?q=<query>&format=json`
-- **Setup:** Installed and configured by setup.sh (does not auto-start)
+- **Setup:** Installed and configured by setup.sh (always on by default)
 - **Start:** `~/scripts/start-searxng.sh`
 - **Stop:** `~/scripts/stop-searxng.sh`
-- **Usage:** Start before searching, stop when done. Agent manages this automatically.
+- **Usage:** Always on. Agent can stop with ~/scripts/stop-searxng.sh if needed.
 
 ---
 

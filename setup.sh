@@ -567,8 +567,35 @@ server:
 SEARXNG_CONF
 
     pretty_print "SearXNG configured at $searxng_conf_dir/settings.yml"
-    pretty_print "Start: ~/scripts/start-searxng.sh" "${fg_cyan}"
-    pretty_print "Stop:  ~/scripts/stop-searxng.sh" "${fg_cyan}"
+
+    # Auto-start SearXNG (always on by default)
+    pretty_print "Starting SearXNG..." "${fg_cyan}"
+    pkill -f "searx.webapp" 2>/dev/null || true
+    sleep 1
+    rm -f /tmp/searxng_web.log 2>/dev/null || true
+    export SEARXNG_SETTINGS_PATH="$searxng_conf_dir/settings.yml"
+    nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
+    for i in 1 2 3 4 5 6 7 8; do
+        sleep 2
+        if curl -sf "http://127.0.0.1:$searxng_port" >/dev/null 2>&1; then
+            pretty_print "SearXNG running on http://127.0.0.1:$searxng_port"
+            break
+        fi
+        if [[ $i -eq 8 ]]; then
+            pretty_print "SearXNG failed to start - check /tmp/searxng_web.log" "${fg_yellow}"
+        fi
+    done
+
+    # Auto-start on login
+    if ! grep -q "searx.webapp" "$HOME/.profile" 2>/dev/null; then
+        echo "" >> "$HOME/.profile"
+        echo "# Start SearXNG for private search" >> "$HOME/.profile"
+        echo "export SEARXNG_SETTINGS_PATH=\$HOME/.config/searxng/settings.yml" >> "$HOME/.profile"
+        echo "nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &" >> "$HOME/.profile"
+        pretty_print "SearXNG auto-start added to ~/.profile"
+    fi
+
+    pretty_print "SearXNG always on - stop with ~/scripts/stop-searxng.sh if needed" "${fg_cyan}"
     cd "$orig_cwd" 2>/dev/null || true
 }
 
