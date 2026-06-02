@@ -354,7 +354,9 @@ function deploy_workspace() {
         pretty_print "Backed up existing workspace" "${fg_yellow}"
     fi
     mkdir -p "$workspace_target"
+    shopt -s dotglob
     cp -r "$REPO_DIR/workspace/"* "$workspace_target/"
+    shopt -u dotglob
     cd "$workspace_target"
     sed -i "s/{{AGENT_NAME}}/$AGENT_NAME/g; s/{{AGENT_EMOJI}}/✨/g" IDENTITY.md
     sed -i "s/{{YOUR_NAME}}/friend/g; s/{{PREFERRED_NAME}}/friend/g; s/{{TIMEZONE}}/UTC/g" USER.md
