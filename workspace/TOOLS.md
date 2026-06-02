@@ -24,11 +24,11 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ## OpenViking (Vector Memory)
 
-- **Location:** `~/.openviking/`
-- **Server:** Ollama (http://127.0.0.1:11434)
+- **Config:** `~/.openviking/ov.conf`
+- **Server:** Ollama (http://127.0.0.1:11434) — auto-starts on login via `~/.profile`
 - **Model:** all-minilm (for embeddings)
-- **CLI:** `ov.py` (in workspace root)
-- **Usage:** `python3 ov.py find "query"` / `python3 ov.py store "fact"`
+- **CLI:** `ov.py` (on PATH — symlinked to `~/.local/bin/ov.py`)
+- **Usage:** `ov.py find "query"` / `ov.py store "fact"` / `ov.py status`
 
 ---
 
@@ -36,4 +36,4 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 - **Location:** `~/.openclaw/tools/repomap`
 - **Usage:** `repomap <directory> [map_tokens]`
-- **Parses:** Python, TypeScript, JavaScript, Go, Rust, Java, C++, and more
+- **Parses:** Python, TypeScript, JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more
