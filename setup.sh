@@ -262,6 +262,11 @@ mkdir -p "$HOME/scripts"
 cp -r "$REPO_DIR/scripts/"* "$HOME/scripts/" 2>/dev/null || true
 chmod +x "$HOME/scripts/"*.sh 2>/dev/null || true
 
+# ── Agent tools (referenced from AGENTS.md) ───────────────────────
+mkdir -p "$HOME/.openclaw/tools"
+cp "$REPO_DIR/scripts/repomap" "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
+chmod +x "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
+
 # Copy plans
 mkdir -p "$HOME/plans"
 cp -r "$REPO_DIR/plans/"* "$HOME/plans/" 2>/dev/null || true
