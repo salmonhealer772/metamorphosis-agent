@@ -591,7 +591,7 @@ SEARXNG_CONF
         echo "" >> "$HOME/.profile"
         echo "# Start SearXNG for private search" >> "$HOME/.profile"
         echo "export SEARXNG_SETTINGS_PATH=\$HOME/.config/searxng/settings.yml" >> "$HOME/.profile"
-        echo "nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &" >> "$HOME/.profile"
+        echo "cd \$HOME/searxng && nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &" >> "$HOME/.profile"
         pretty_print "SearXNG auto-start added to ~/.profile"
     fi
 

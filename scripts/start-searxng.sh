@@ -32,7 +32,8 @@ sleep 1
 # Clear old log
 rm -f "$SEARXNG_LOG" 2>/dev/null || true
 
-# Start
+# Start from searxng dir (editable install needs the module in CWD)
+cd "$HOME/searxng" || exit 1
 export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
 nohup python3 -m searx.webapp > "$SEARXNG_LOG" 2>&1 &
 
