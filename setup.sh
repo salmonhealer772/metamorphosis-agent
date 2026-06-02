@@ -15,7 +15,7 @@ fail()  { echo -e "  ${RED}✗${NC} $*"; }
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║         metamorphosis-agent — Local Setup                   ║${NC}"
-echo -e "${BOLD}║         Claude Code, but actually local. 🦋               ║${NC}"
+echo -e "${BOLD}║         Claude Code, but actually local. 🐢               ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -24,51 +24,114 @@ START_DIR="$(pwd)"
 # ── Prerequisites ──────────────────────────────────────────────────
 echo -e "${DIM}→ Checking system…${NC}"
 for cmd in git curl python3 node npm; do
-  command -v "$cmd" >/dev/null 2>&1 || { fail "$cmd not found"; exit 1; }
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    fail "$cmd not found — install it first"
+    exit 1
+  fi
 done
 ok "Prerequisites: git, curl, python3, node, npm"
 
-# ── Bootstrap pip (needed for openviking + zstandard) ────────────
-echo -e "${DIM}→ Setting up Python package management…${NC}"
-PIP_BOOTSTRAPPED=false
-if python3 -m pip --version >/dev/null 2>&1; then
-  PIP_BOOTSTRAPPED=true
-  ok "pip already available"
-elif python3 -c "import ensurepip; print('ok')" >/dev/null 2>&1; then
-  python3 -m ensurepip --upgrade --user 2>&1 | tail -1
-  PIP_BOOTSTRAPPED=true
-  ok "pip installed via ensurepip"
-else
-  # No pip at all — bootstrap via pip.pyz
-  info "Bootstrapping pip via pip.pyz…"
-  curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz && \
-    python3 /tmp/pip.pyz install --user pip -q 2>/dev/null && \
-    PIP_BOOTSTRAPPED=true
-  if [ "$PIP_BOOTSTRAPPED" = true ]; then
-    ok "pip bootstrapped"
-  else
-    warn "pip bootstrap failed — openviking won't be usable"
-  fi
+# Detect distro
+DISTRO=""
+if [ -f /etc/os-release ]; then
+  DISTRO=$(grep ^ID= /etc/os-release | cut -d= -f2 | tr -d '"')
 fi
+UBUNTU_NOBLE=false
+[ "$DISTRO" = "ubuntu" ] && grep -q 'VERSION_ID="24.04"' /etc/os-release 2>/dev/null && UBUNTU_NOBLE=true
 
-# ── Install openviking Python package ────────────────────────────
-echo -e "${DIM}→ Installing OpenViking…${NC}"
-if python3 -c "import openviking" 2>/dev/null; then
-  ok "openviking already installed"
+# ── Python / Pip Bootstrap ───────────────────────────────────────
+# Ubuntu 24.04 ships python3 without pip or ensurepip, and marks the
+# environment as externally managed (PEP 668). We need real pip.
+echo ""
+echo -e "${BOLD}→ Python Package Management${NC}"
+
+# Try apt first (Ubuntu/Debian) — this is the only reliable way to get pip
+PIP_CMD=""
+if python3 -m pip --version >/dev/null 2>&1; then
+  PIP_CMD="python3 -m pip"
+  ok "pip already available ($(python3 -m pip --version | cut -d' ' -f2))"
 else
-  if [ "$PIP_BOOTSTRAPPED" = true ]; then
-    info "Installing openviking…"
-    if [ -f /tmp/pip.pyz ]; then
-      python3 /tmp/pip.pyz install --user --break-system-packages openviking -q 2>/dev/null && \
-        ok "openviking installed" || warn "openviking install failed"
+  info "pip not found — attempting to install…"
+  # Try apt for Ubuntu/Debian
+  if [ "$UBUNTU_NOBLE" = true ] || [ "$DISTRO" = "debian" ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      info "Installing python3-pip via apt (sudo required)…"
+      sudo apt update -qq && sudo apt install -y -qq python3-pip python3-pip-whl 2>&1 | tail -1
+      if python3 -m pip --version >/dev/null 2>&1; then
+        PIP_CMD="python3 -m pip"
+        ok "pip installed via apt ($(python3 -m pip --version | cut -d' ' -f2))"
+      else
+        warn "apt install failed — falling back to venv"
+      fi
     else
-      python3 -m pip install --user --break-system-packages openviking -q 2>/dev/null && \
-        ok "openviking installed" || warn "openviking install failed"
+      warn "sudo not available — falling back to venv"
+    fi
+  fi
+
+  # Fallback: pip.pyz bootstrap + --break-system-packages
+  if [ -z "$PIP_CMD" ] && [ ! -f /tmp/pip.pyz ]; then
+    info "Downloading pip.pyz…"
+    curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz
+    if [ -f /tmp/pip.pyz ]; then
+      ok "pip.pyz downloaded ($(stat -c%s /tmp/pip.pyz 2>/dev/null) bytes)"
+    else
+      warn "pip.pyz download failed"
+    fi
+  fi
+
+  if [ -z "$PIP_CMD" ] && [ -f /tmp/pip.pyz ]; then
+    if python3 /tmp/pip.pyz install --user --break-system-packages pip -q 2>&1; then
+      export PATH="$HOME/.local/bin:$PATH"
+      if python3 -m pip --version >/dev/null 2>&1; then
+        PIP_CMD="python3 -m pip"
+        ok "pip installed via pip.pyz ($(python3 -m pip --version | cut -d' ' -f2))"
+      fi
+    else
+      warn "pip.pyz pip install failed (PEP 668)"
+    fi
+  fi
+
+  # Final fallback: create a venv to sidestep PEP 668 entirely
+  if [ -z "$PIP_CMD" ]; then
+    if python3 -m venv "$HOME/.openclaw/venv" 2>&1; then
+      PIP_CMD="$HOME/.openclaw/venv/bin/pip"
+      ok "Created Python venv at ~/.openclaw/venv (no sudo, no PEP 668 issues)"
+    else
+      warn "venv creation failed — need python3-venv package"
+      warn "Run: sudo apt install python3-venv python3-pip"
+      warn "Then re-run this script"
     fi
   fi
 fi
 
-# Ensure storage directory exists
+# Verify we have something
+if [ -z "$PIP_CMD" ]; then
+  fail "No pip available. Install python3-pip manually and re-run."
+  exit 1
+fi
+
+PIP_INSTALL="$PIP_CMD install --user --break-system-packages"
+# If using venv pip, --user doesn't make sense
+if echo "$PIP_CMD" | grep -q "/venv/bin/pip"; then
+  PIP_INSTALL="$PIP_CMD install"
+fi
+
+# ── Install openviking ────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}→ OpenViking (Vector Memory)${NC}"
+if python3 -c "import openviking" 2>/dev/null; then
+  ok "openviking $(python3 -c 'import openviking; print(openviking.__version__)' 2>/dev/null) already installed"
+else
+  info "Installing openviking (this may take a minute — 50+ dependencies)…"
+  if $PIP_INSTALL openviking 2>&1; then
+    ok "openviking installed"
+  else
+    warn "openviking install failed"
+    warn "  Try: $PIP_INSTALL openviking"
+  fi
+fi
+
+# Ensure storage directory (created now so it exists before ov.py runs)
 mkdir -p "$HOME/.openclaw/workspace/.openviking"
 
 # ── OpenClaw ──────────────────────────────────────────────────────
@@ -97,7 +160,6 @@ echo "  8) Mistral"
 echo "  9) Fireworks"
 read -rp "  Pick (1-9): " PROVIDER_IDX
 
-# Map selection to onboard params
 AUTH_CHOICE=""
 CLI_FLAG=""
 case "$PROVIDER_IDX" in
@@ -139,11 +201,8 @@ install_ollama_local() {
 
   # Ensure zstandard is available for decompressing the Ollama tarball
   python3 -c "import zstandard" 2>/dev/null || {
-    if [ -f /tmp/pip.pyz ]; then
-      python3 /tmp/pip.pyz install --user --break-system-packages zstandard -q 2>/dev/null
-    else
-      python3 -m pip install --user --break-system-packages zstandard -q 2>/dev/null
-    fi
+    info "Installing zstandard for Ollama tarball decompression…"
+    $PIP_INSTALL zstandard -q 2>&1 || warn "zstandard install failed"
   }
 
   OLLAMA_DL_SCRIPT="/tmp/_ollama_dl_$$.py"
@@ -161,7 +220,6 @@ reader = dctx.stream_reader(resp)
 with tarfile.open(fileobj=reader, mode='r|') as tar:
     tar.extractall(path=dest)
 
-# Ensure binary is executable
 binpath = os.path.join(dest, 'bin', 'ollama')
 if os.path.exists(binpath):
     os.chmod(binpath, os.stat(binpath).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -170,7 +228,6 @@ PYEOF
 
   OLLAMA_URL="$URL" OLLAMA_DEST="$DEST" python3 "$OLLAMA_DL_SCRIPT" && rm -f "$OLLAMA_DL_SCRIPT"
 
-  # Persist PATH
   grep -q '.local/bin' "$HOME/.profile" 2>/dev/null || \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
 }
@@ -187,13 +244,11 @@ fi
 
 command -v ollama >/dev/null 2>&1 && ok "Ollama ready" || warn "Ollama not found — install manually"
 
-# Pull model
 if command -v ollama >/dev/null 2>&1; then
   info "Pulling embedding model (all-minilm)…"
   ollama pull all-minilm 2>&1 && ok "Embedding model ready" || warn "Pull failed — run 'ollama pull all-minilm' later"
 fi
 
-# Start service
 if command -v ollama >/dev/null 2>&1; then
   if ! curl -s http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     info "Starting Ollama service…"
@@ -232,6 +287,18 @@ cat > "$HOME/.openviking/ov.conf" << OVCONF
 }
 OVCONF
 ok "OpenViking configured"
+
+# Verify openviking actually works now
+if python3 -c "import openviking" 2>/dev/null; then
+  cd "$WORKSPACE_TARGET"
+  if python3 ov.py status 2>&1 | grep -q "Semantic search: OK"; then
+    ok "OpenViking operational — semantic search online"
+  else
+    warn "OpenViking package installed but status check had issues"
+  fi
+  cd "$START_DIR" 2>/dev/null || true
+fi
+
 echo -e "  ${DIM}  ${CYAN}python3 ov.py find \"query\"${NC}  — search"
 echo -e "  ${DIM}  ${CYAN}python3 ov.py store \"fact\"${NC} — save"
 echo -e "  ${DIM}  ${CYAN}python3 ov.py status${NC}       — health"
@@ -244,16 +311,14 @@ echo -e "  ${DIM}Self-hosted search engine. No Google tracking.${NC}"
 SEARXNG_PORT=8888
 SEARXNG_CONF_DIR="$HOME/.config/searxng"
 
-# Check if already running
 if curl -sf "http://127.0.0.1:$SEARXNG_PORT/search?q=health" >/dev/null 2>&1; then
   ok "SearXNG already running on http://127.0.0.1:$SEARXNG_PORT"
 else
   if [ ! -d "$HOME/searxng" ]; then
-    info "Installing SearXNG…"
-    git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>/dev/null || {
-      warn "SearXNG clone failed — skipping"
+    info "Cloning SearXNG…"
+    git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>&1 || {
+      warn "SearXNG clone failed — skipping search setup"
       cd "$START_DIR" 2>/dev/null || true
-      warn "SearXNG not available — agent will use web_search instead"
     }
   fi
 
@@ -263,14 +328,17 @@ else
       ok "SearXNG already installed"
     else
       info "Installing SearXNG Python package…"
-      if [ -f /tmp/pip.pyz ]; then
-        python3 /tmp/pip.pyz install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
-      else
-        python3 -m pip install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
-      fi
+      $PIP_INSTALL -e . 2>&1 || warn "SearXNG install had issues"
     fi
 
-    # Create config with proper bind_address and port
+    # Install msgspec (required by SearXNG but missing from its dev dependencies)
+    if python3 -c "import msgspec" 2>/dev/null; then
+      ok "msgspec already installed"
+    else
+      info "Installing msgspec (SearXNG dependency)…"
+      $PIP_INSTALL msgspec -q 2>&1 || warn "msgspec install failed"
+    fi
+
     mkdir -p "$SEARXNG_CONF_DIR"
     SEARXNG_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
     cat > "$SEARXNG_CONF_DIR/settings.yml" << SEARXNG_CONF
@@ -281,24 +349,25 @@ server:
   port: $SEARXNG_PORT
 SEARXNG_CONF
 
-    # Kill any stale SearXNG from previous runs
     pkill -f "searx.webapp" 2>/dev/null || true
     sleep 1
 
-    # Start SearXNG with our config
     info "Starting SearXNG…"
     export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
     nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
     cd "$START_DIR" 2>/dev/null || true
 
-    # Wait for port to actually be listening (up to 20s)
     for i in 1 2 3 4 5 6 7 8 9 10; do
       sleep 2
       if curl -sf "http://127.0.0.1:$SEARXNG_PORT" >/dev/null 2>&1; then
         ok "SearXNG running on http://127.0.0.1:$SEARXNG_PORT"
         break
       fi
-      [ "$i" -eq 10 ] && warn "SearXNG failed to start — check /tmp/searxng_web.log"
+      if [ "$i" -eq 10 ]; then
+        warn "SearXNG failed to start after 20s"
+        warn "  Check /tmp/searxng_web.log for details"
+        tail -5 /tmp/searxng_web.log 2>/dev/null
+      fi
     done
   fi
 fi
@@ -318,12 +387,24 @@ mkdir -p "$HOME/plans"
 cp -r "$REPO_DIR/plans/"* "$HOME/plans/" 2>/dev/null || true
 cd "$START_DIR" 2>/dev/null || true
 
-# Bootstrap OpenClaw config (workspace, gateway, sessions)
+# ── Clone repo into workspace ─────────────────────────────────────
+echo ""
+echo -e "${BOLD}→ Agent Repository${NC}"
+if [ -d "$WORKSPACE_TARGET/metamorphosis-agent/.git" ]; then
+  ok "Repo already cloned"
+else
+  info "Cloning agent repo into workspace…"
+  git clone --depth 1 https://github.com/salmonhealer772/metamorphosis-agent.git \
+    "$WORKSPACE_TARGET/metamorphosis-agent" 2>&1 && \
+    ok "Repo cloned" || \
+    warn "Repo clone failed — agent can still function without it"
+fi
+
+# ── Bootstrap OpenClaw ────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}→ Configuring OpenClaw…${NC}"
 openclaw onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || warn "Bootstrap had issues"
 
-# Register the API key with OpenClaw's auth store
 openclaw onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
   warn "Provider setup had issues — run 'openclaw onboard' manually"
 
@@ -333,5 +414,4 @@ echo ""
 echo -e "  ${DIM}Starting your agent…${NC}"
 echo ""
 
-# Launch openclaw — first run intro is handled by the agent itself
 openclaw
