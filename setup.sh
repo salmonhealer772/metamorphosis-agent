@@ -660,6 +660,38 @@ function bootstrap_openclaw() {
 }
 
 # ---- DESC: Main control flow --------------------------------------------------
+# ---- DESC: Initialize health state ----------------------------------------
+function init_health_state() {
+    local health_file="$HOME/.openclaw/health-state.json"
+    local ollama_status="down"
+    local openviking_status="down"
+    local model_status="down"
+    local searxng_status="down"
+    local disk_pct
+
+    curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
+    if [[ "$ollama_status" = "ok" ]]; then
+        cd "$WORKSPACE_TARGET" 2>/dev/null
+        python3 ov.py status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
+        ollama list 2>&1 | grep -q all-minilm && model_status="ok"
+    fi
+    curl -sf http://127.0.0.1:8888 >/dev/null 2>&1 && searxng_status="ok"
+    disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
+
+    mkdir -p "$(dirname "$health_file")"
+    cat > "$health_file" << EOF
+{
+  "last_checked": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "ollama": { "status": "$ollama_status" },
+  "openviking": { "status": "$openviking_status" },
+  "all_minilm": { "status": "$model_status" },
+  "searxng": { "status": "$searxng_status" },
+  "disk": { "status": "ok", "usage_pct": $disk_pct }
+}
+EOF
+    pretty_print "Health state initialized"
+}
+
 function main() {
     trap script_trap_err ERR
     trap script_trap_exit EXIT
@@ -685,6 +717,7 @@ function main() {
     deploy_scripts
     clone_repo_into_workspace
     bootstrap_openclaw
+    init_health_state
 
     echo ""
     pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"
