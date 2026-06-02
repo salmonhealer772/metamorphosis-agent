@@ -290,13 +290,14 @@ ok "OpenViking configured"
 
 # Verify openviking actually works now
 if python3 -c "import openviking" 2>/dev/null; then
-  cd "$WORKSPACE_TARGET"
-  if python3 ov.py status 2>&1 | grep -q "Semantic search: OK"; then
-    ok "OpenViking operational — semantic search online"
-  else
-    warn "OpenViking package installed but status check had issues"
+  if cd "$WORKSPACE_TARGET" 2>/dev/null; then
+    if python3 ov.py status 2>&1 | grep -q "Semantic search: OK"; then
+      ok "OpenViking operational — semantic search online"
+    else
+      warn "OpenViking package installed but status check had issues"
+    fi
+    cd "$START_DIR" 2>/dev/null || true
   fi
-  cd "$START_DIR" 2>/dev/null || true
 fi
 
 echo -e "  ${DIM}  ${CYAN}python3 ov.py find \"query\"${NC}  — search"
@@ -351,6 +352,9 @@ SEARXNG_CONF
 
     pkill -f "searx.webapp" 2>/dev/null || true
     sleep 1
+
+    # Clear old log so failure tail shows fresh error
+    rm -f /tmp/searxng_web.log
 
     info "Starting SearXNG…"
     export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
