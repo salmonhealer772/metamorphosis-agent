@@ -1,4 +1,4 @@
-# metamorphosis-agent 🔥
+# metamorphosis-agent 🐢
 
 **Claude Code, but local. Persistent memory. Self-editing. Open source.**
 
