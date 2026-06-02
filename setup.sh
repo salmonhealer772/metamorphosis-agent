@@ -239,21 +239,8 @@ function bootstrap_pip() {
 
     pretty_print "pip not found — attempting to install…" "${fg_cyan}"
 
-    # Try apt first
-    if [[ "$UBUNTU_NOBLE" = true ]] || [[ "$DISTRO" = "debian" ]]; then
-        if command -v sudo >/dev/null 2>&1; then
-            pretty_print "Installing python3-pip via apt…" "${fg_cyan}"
-            sudo apt update -qq && sudo apt install -y -qq python3-pip python3-pip-whl 2>&1 | tail -1 || true
-            if python3 -m pip --version >/dev/null 2>&1; then
-                PIP_CMD="python3 -m pip"
-                pretty_print "pip installed via apt ($(python3 -m pip --version | cut -d' ' -f2))"
-                return
-            fi
-            pretty_print "apt install failed — falling back to pip.pyz" "${fg_yellow}"
-        fi
-    fi
-
-    # Fallback: pip.pyz
+    # pip.pyz (no sudo, handles PEP 668 via --break-system-packages)
+    pretty_print "Installing pip via pip.pyz…" "${fg_cyan}"
     pretty_print "Downloading pip.pyz…" "${fg_cyan}"
     curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz
     if [[ ! -f /tmp/pip.pyz ]]; then
@@ -276,8 +263,8 @@ function bootstrap_pip() {
         return
     fi
 
-    pretty_print "No pip available after trying: apt, pip.pyz, and venv." "${fg_red}"
-    pretty_print "Install python3-pip with: sudo apt install python3-pip" "${fg_red}"
+    pretty_print "No pip available after trying: pip.pyz and venv." "${fg_red}"
+    pretty_print "Install pip manually or use: python3 -m venv ~/.openclaw/venv" "${fg_red}"
     exit 1
 }
 
