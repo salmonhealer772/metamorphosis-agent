@@ -326,19 +326,20 @@ else
 
   if [ -d "$HOME/searxng" ]; then
     cd "$HOME/searxng"
+    # Install msgspec FIRST — SearXNG imports it at module level,
+    # so pip needs it just to build the editable install (-e .)
+    if python3 -c "import msgspec" 2>/dev/null; then
+      ok "msgspec already installed"
+    else
+      info "Installing msgspec (required by SearXNG build)…"
+      $PIP_INSTALL msgspec -q 2>&1 || warn "msgspec install failed"
+    fi
+
     if python3 -c "import searx" 2>/dev/null; then
       ok "SearXNG already installed"
     else
       info "Installing SearXNG Python package…"
       $PIP_INSTALL -e . 2>&1 || warn "SearXNG install had issues"
-    fi
-
-    # Install msgspec (required by SearXNG but missing from its dev dependencies)
-    if python3 -c "import msgspec" 2>/dev/null; then
-      ok "msgspec already installed"
-    else
-      info "Installing msgspec (SearXNG dependency)…"
-      $PIP_INSTALL msgspec -q 2>&1 || warn "msgspec install failed"
     fi
 
     mkdir -p "$SEARXNG_CONF_DIR"
