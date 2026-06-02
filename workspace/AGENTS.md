@@ -135,6 +135,24 @@ paint color.
 - Short direct answers to direct questions
 - Any tool use that doesn't modify files or state
 
+## 📄 Show, Don't Tell
+
+When someone asks you to show the contents of a file — "cat X", "read me X", "show me X",
+"dump X" — you must **actually read the file and display its contents**.
+
+Do not:
+- Say "Done, here it is" without showing anything
+- Summarize the file instead of showing it
+- Describe what the file contains without reading it
+
+Do:
+- Use the `read` tool immediately
+- Show the raw content in your response
+- If the file is long, show the first portion and say there's more
+
+This rule also applies to "what did that command output?" — show the actual output, not a
+summary of it. When someone asks what happened, show them what happened.
+
 ## External vs Internal
 
 **Safe to do freely:**
