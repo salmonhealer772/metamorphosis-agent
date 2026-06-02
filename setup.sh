@@ -28,6 +28,49 @@ for cmd in git curl python3 node npm; do
 done
 ok "Prerequisites: git, curl, python3, node, npm"
 
+# ── Bootstrap pip (needed for openviking + zstandard) ────────────
+echo -e "${DIM}→ Setting up Python package management…${NC}"
+PIP_BOOTSTRAPPED=false
+if python3 -m pip --version >/dev/null 2>&1; then
+  PIP_BOOTSTRAPPED=true
+  ok "pip already available"
+elif python3 -c "import ensurepip; print('ok')" >/dev/null 2>&1; then
+  python3 -m ensurepip --upgrade --user 2>&1 | tail -1
+  PIP_BOOTSTRAPPED=true
+  ok "pip installed via ensurepip"
+else
+  # No pip at all — bootstrap via pip.pyz
+  info "Bootstrapping pip via pip.pyz…"
+  curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz && \
+    python3 /tmp/pip.pyz install --user pip -q 2>/dev/null && \
+    PIP_BOOTSTRAPPED=true
+  if [ "$PIP_BOOTSTRAPPED" = true ]; then
+    ok "pip bootstrapped"
+  else
+    warn "pip bootstrap failed — openviking won't be usable"
+  fi
+fi
+
+# ── Install openviking Python package ────────────────────────────
+echo -e "${DIM}→ Installing OpenViking…${NC}"
+if python3 -c "import openviking" 2>/dev/null; then
+  ok "openviking already installed"
+else
+  if [ "$PIP_BOOTSTRAPPED" = true ]; then
+    info "Installing openviking…"
+    if [ -f /tmp/pip.pyz ]; then
+      python3 /tmp/pip.pyz install --user --break-system-packages openviking -q 2>/dev/null && \
+        ok "openviking installed" || warn "openviking install failed"
+    else
+      python3 -m pip install --user --break-system-packages openviking -q 2>/dev/null && \
+        ok "openviking installed" || warn "openviking install failed"
+    fi
+  fi
+fi
+
+# Ensure storage directory exists
+mkdir -p "$HOME/.openclaw/workspace/.openviking"
+
 # ── OpenClaw ──────────────────────────────────────────────────────
 if ! command -v openclaw >/dev/null 2>&1; then
   info "Installing OpenClaw…"
@@ -94,11 +137,13 @@ install_ollama_local() {
   mkdir -p "$DEST/bin"
   export PATH="$DEST/bin:$PATH"
 
-  # Ensure zstandard is available (no sudo — use pip.pyz to bootstrap)
+  # Ensure zstandard is available for decompressing the Ollama tarball
   python3 -c "import zstandard" 2>/dev/null || {
-    curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz 2>/dev/null
-    python3 /tmp/pip.pyz install --user --break-system-packages zstandard -q 2>/dev/null
-    python3 /tmp/pip.pyz install --user openviking -q 2>/dev/null
+    if [ -f /tmp/pip.pyz ]; then
+      python3 /tmp/pip.pyz install --user --break-system-packages zstandard -q 2>/dev/null
+    else
+      python3 -m pip install --user --break-system-packages zstandard -q 2>/dev/null
+    fi
   }
 
   OLLAMA_DL_SCRIPT="/tmp/_ollama_dl_$$.py"
@@ -200,7 +245,11 @@ if [ ! -d "$HOME/searxng" ]; then
   # Install via pip (no sudo)
   git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>/dev/null || warn "Clone failed"
   cd "$HOME/searxng"
-  python3 /tmp/pip.pyz install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+  if [ -f /tmp/pip.pyz ]; then
+    python3 /tmp/pip.pyz install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+  else
+    python3 -m pip install --user --break-system-packages -e . 2>/dev/null || warn "SearXNG install had issues"
+  fi
   cd "$START_DIR" 2>/dev/null || true
 fi
 # Start SearXNG in background
