@@ -368,6 +368,14 @@ mkdir -p "$HOME/.openclaw/tools"
 cp "$REPO_DIR/scripts/repomap" "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
 chmod +x "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
 
+# Install aider-chat (repomap dependency)
+if python3 -c "import aider" 2>/dev/null; then
+  ok "aider-chat already installed"
+else
+  info "Installing aider-chat (required by repomap tool)…"
+  $PIP_INSTALL aider-chat -q 2>&1 || warn "aider-chat install failed — repomap won't work"
+fi
+
 # Copy plans
 mkdir -p "$HOME/plans"
 cp -r "$REPO_DIR/plans/"* "$HOME/plans/" 2>/dev/null || true
