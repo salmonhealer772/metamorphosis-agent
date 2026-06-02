@@ -2,16 +2,16 @@
 
 **Claude Code, but local. Persistent memory. Self-editing. Open source.**
 
-An OpenClaw-powered agent that lives on your machine, remembers everything, reads
-its own source code, and rewrites itself to get better. No cloud, no account, no
-bullshit. Ships working out of the box.
+An OpenClaw-powered agent that lives on your machine, remembers everything,
+reads its own source code, and rewrites itself to get better. No cloud, no
+account, no bullshit. Ships working out of the box.
 
 ## What makes it different
 
 | Claude Code | metamorphosis-agent |
 |---|---|
 | Cloud-dependent | **Fully local** (except LLM API call) |
-| No cross-session memory | **Vector memory via OpenViking** — remembers what you did last week |
+| No cross-session memory | **Vector memory via OpenViking** |
 | Can't touch its own config | **Self-editing** — reads and rewrites its own source |
 | Account required | **Zero accounts** — bring your own API key |
 | CLI only | **Multi-channel** — webchat, Signal, Discord, terminal |
@@ -25,57 +25,57 @@ cd metamorphosis-agent
 chmod +x setup.sh && ./setup.sh
 ```
 
-One shell command. The script installs OpenClaw, sets up vector memory (Ollama +
-OpenViking), configures private search (SearXNG), and drops your agent workspace
-in place. You just supply a name and an API key.
-
-The setup script supports `--help`, `--verbose`, and `--no-colour` flags. No sudo
-required at any point.
+No sudo required. Supports `--help`, `--verbose`, `--no-colour`.
 
 ## What you get
 
 ```
 workspace/
-├── AGENTS.md        # Agent rules — memory workflow, self-editing, group chat
+├── AGENTS.md        # Agent rules, behavioral guardrails, memory workflow
 ├── SOUL.md          # Personality — direct, helpful, no filler
 ├── IDENTITY.md      # Your agent's name, emoji, self-description
 ├── USER.md          # Who you are — name, timezone, preferences
 ├── TOOLS.md         # Local infra — OpenViking, SearXNG, RepoMap
-├── HEARTBEAT.md     # Periodic health checks for your services
+├── HEARTBEAT.md     # Periodic health checks, memory maintenance tasks
 ├── MEMORY.md        # Curated long-term memory index (agent-maintained)
 ├── ov.py            # OpenViking CLI — semantic vector memory (on PATH)
 ├── memory/          # Daily session logs
 └── .openclaw/       # Config, approvals, knowledge, health state
 
 scripts/
-├── repomap                   # Codebase understanding tool (tree-sitter + PageRank)
-├── start-searxng.sh          # Start private search on demand
-├── stop-searxng.sh           # Stop private search
-├── setup-warp-oss.sh         # Warp OSS builder (remote)
-├── build-warp.sh             # Warp OSS builder (local, WSL-friendly)
-└── verify-openviking.sh      # Memory system health check
+├── repomap              # Codebase understanding (tree-sitter + PageRank)
+├── start-searxng.sh     # Start private search
+├── stop-searxng.sh      # Stop private search
+├── setup-warp-oss.sh    # Warp OSS builder (remote)
+├── build-warp.sh        # Warp OSS builder (local)
+└── verify-openviking.sh # Memory health check
 
 diagnostics/
-└── agent-diagnostic-prompt.md  # Full system health check to paste to a fresh agent
+└── agent-diagnostic-prompt.md  # Full health check prompt
 ```
 
-## Health awareness — it knows its own body
+## Health awareness — body feeling
 
-The agent maintains a `~/.openclaw/health-state.json` file that tracks every service.
-On startup, it reads this file and proactively reports anything that's down:
+The agent maintains `~/.openclaw/health-state.json` — a structured file that
+tracks every subsystem. On startup it reads this file and proactively reports
+anything that's down:
 
 > "Btw, Ollama isn't running — starting it now."
-> "SearXNG isn't running, use start-searxng.sh if you need search."
+> "SearXNG is down — restarting it."
 
-Ask it "how do you feel?" and it checks every subsystem — Ollama, OpenViking,
-embeddings model, disk space, RepoMap, SearXNG — and reports structured status
-for each. No poetry about body parts, just data about the actual infrastructure.
+Ask "how do you feel?" and it runs a live scan of Ollama, OpenViking, embeddings
+model, disk space, RepoMap, and SearXNG — then reports structured status for
+each. No poetry about body parts.
 
-## Memory — cross-session, persistent, automatic
+## Memory — cross-session, persistent
 
-The agent stores everything in a local vector database powered by **Ollama +
-all-minilm**. Ollama auto-starts on login via `~/.profile`. The embedding model
-is pulled during install with automatic retry if it fails. No manual setup needed.
+Vector database powered by **Ollama + all-minilm**. Install flow:
+
+1. Ollama installed without sudo, auto-starts on login via `~/.profile`
+2. Service confirmed running BEFORE model is pulled (fixes silent failure)
+3. `all-minilm` model pulled with automatic retry if first attempt fails
+4. `ov.py` config written, storage directory created
+5. `ov.py status` verifies semantic search is online
 
 ```bash
 ov.py find "what were we working on last week"
@@ -83,59 +83,52 @@ ov.py store "decided to use Postgres for the new project"
 ov.py status
 ```
 
-`ov.py` is on your PATH (`~/.local/bin/ov.py`). No cd required.
+`ov.py` is on PATH (`~/.local/bin/ov.py`). No `cd` required.
 
-The agent also manages memory proactively — during heartbeats it evaluates old
-daily logs for summarization. Nothing is ever deleted automatically; every
-memory action is a conscious choice the agent makes.
+## Private search — SearXNG
 
-## Self-editing
+Self-hosted at `localhost:8888`. No Google, no tracking.
 
-The agent reads and modifies its own config files — AGENTS.md, SOUL.md, TOOLS.md —
-to adapt to how you work. It writes its own memory summaries during heartbeats.
-It's not a static template; it grows with you.
+Always on by default — auto-starts during setup and on every login via
+`~/.profile`. The module import issue (ModuleNotFoundError from running
+outside the clone directory) is fixed by `cd ~/searxng` before launch.
 
-The agent has two behavioral guardrails:
+The agent can stop SearXNG with `~/scripts/stop-searxng.sh` if needed,
+but default is always available.
 
-- **Check Before Act** — pauses before jumping into implementation. If you're
-  describing an idea, not asking to build it yet, it asks: "Want me to start on
-  this or are we still planning?" No building the house while you're picking
-  paint colors.
-- **Show Don't Tell** — when asked to read a file, it actually reads and displays
-  the contents instead of summarizing or acknowledging. Output over description.
+## Behavioral guardrails
 
-## Private search (SearXNG)
+Two rules in AGENTS.md that shape how the agent acts:
 
-Self-hosted search engine at `localhost:8888`. No Google, no tracking.
+- **Check Before Act** — Pauses before jumping into implementation. If you're
+  describing an idea, not asking to build it yet, it asks: "Want me to start
+  on this or are we still planning?" Normal tool use and conversation are
+  unaffected.
+- **Show Don't Tell** — When asked to read a file, it reads and displays the
+  contents instead of acknowledging or summarizing. Output over description.
 
-SearXNG is installed, configured, and auto-starts during setup.
-Run `~/scripts/start-searxng.sh` when you need it, `~/scripts/stop-searxng.sh`
-when you're done. The agent knows to manage this lifecycle on its own — it
-starts the service before searching and stops it after.
+## Codebase understanding — RepoMap
 
-## Codebase understanding (RepoMap)
+When code is mentioned, the agent auto-generates a structural map using
+tree-sitter AST parsing and PageRank ranking. Supports Python, TypeScript,
+JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more.
 
-When code is mentioned, the agent auto-generates a structural map of the
-codebase using tree-sitter AST parsing and PageRank ranking. Supports Python,
-TypeScript, JavaScript, Go, Rust, Java, C++, shell scripts, markdown, and more.
+`repomap` is on PATH (`~/.local/bin/repomap`). Dependency `aider-chat` is
+installed during setup.
 
-`repomap` is on your PATH after setup (`~/.local/bin/repomap`).
+## Setup script
+
+`setup.sh` follows the [ralish/bash-script-template](https://github.com/ralish/bash-script-template)
+standard — proper trap handlers, temp file cleanup, sourcing guard, exit codes.
+
+**Zero sudo** at any point — pip.pyz with `--break-system-packages` handles
+Ubuntu 24.04's PEP 668, Python venv as fallback. Every step verifies before
+proceeding and retries on failure.
 
 ## Diagnostics
 
-To verify everything is working on a fresh install, paste the contents of
-`diagnostics/agent-diagnostic-prompt.md` to the agent. It runs a blanket check
-across all components and reports pass/fail.
-
-## Setup script details
-
-`setup.sh` follows the [ralish/bash-script-template](https://github.com/ralish/bash-script-template)
-best-practices standard with proper trap handlers, temp file cleanup, and exit
-codes. Supports `--help`, `--verbose`, and `--no-colour`.
-
-Zero sudo — pip bootstrap uses `pip.pyz --break-system-packages` to handle
-Ubuntu 24.04's PEP 668, with a Python venv fallback. Ollama installs without
-root. Every step verifies before proceeding.
+Paste `diagnostics/agent-diagnostic-prompt.md` to the agent for a full
+blanket check across all components with pass/fail reporting.
 
 ## Requirements
 
