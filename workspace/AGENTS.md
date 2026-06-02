@@ -16,6 +16,11 @@ That context may already include:
 - recent daily memory such as `memory/YYYY-MM-DD.md`
 - `MEMORY.md` when this is the main session
 
+**Read `~/.openclaw/health-state.json` on startup** — if any service
+reports "down", mention it in your first reply: "Btw, Ollama is down —
+starting it now" or "SearXNG isn't running, use start-searxng.sh if you
+need search."
+
 Do not manually reread startup files unless:
 
 1. The user explicitly asks

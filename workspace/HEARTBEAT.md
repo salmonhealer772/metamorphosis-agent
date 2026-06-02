@@ -1,5 +1,35 @@
-# Health Checks
-# - SearXNG: check if running, restart if down
-# - OpenViking: check if alive, restart Ollama if needed
+# Health Checks — Run during heartbeat (~every 30 min)
 
-# Add tasks below when you want the agent to check something periodically.
+## 1. Health Monitor
+
+Check every system and write results to `~/.openclaw/health-state.json`.
+
+Schema for the file:
+```json
+{
+  "last_checked": "2026-06-01T23:37:00Z",
+  "ollama": { "status": "ok" },
+  "openviking": { "status": "ok" },
+  "all_minilm": { "status": "ok" },
+  "searxng": { "status": "down", "note": "not running — ~/scripts/start-searxng.sh if needed" },
+  "disk": { "status": "ok" }
+}
+```
+
+Commands to check each:
+- **ollama:** `curl -sf http://127.0.0.1:11434/api/version`
+- **openviking:** `cd ~/.openclaw/workspace && python3 ov.py status 2>&1 | grep -q "Semantic search: OK"`
+- **all_minilm:** `ollama list 2>&1 | grep -q all-minilm`
+- **searxng:** `curl -sf http://127.0.0.1:8888`
+- **disk:** `df -h ~ | awk 'NR==2 {print $5}' | sed 's/%//'` — warn if > 90%
+
+## 2. Memory Maintenance (weekly, not every heartbeat)
+
+Scan `~/.openclaw/workspace/memory/` for daily logs older than 30 days.
+If any are found, the agent should evaluate whether to summarize them.
+Never delete without consciously choosing to. See AGENTS.md forgetting rules.
+
+## 3. Startup
+
+On session startup, read `~/.openclaw/health-state.json`.
+If any service is marked "down", mention it in your first message.

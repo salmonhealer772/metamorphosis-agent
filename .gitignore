@@ -22,3 +22,6 @@ workspace/MEMORY.md
 # Cache
 .aider.tags.cache.v4/
 .repomap.tags.cache.v1/
+
+# Agent runtime state
+workspace/.openclaw/health-state.json
