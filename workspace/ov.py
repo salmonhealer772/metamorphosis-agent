@@ -109,7 +109,7 @@ def cmd_store(args):
     tf.close()
     c = get_client()
     result = c.add_resource(path=tf.name)
-    c.wait_processed(timeout=30)
+    c.wait_processed(timeout=120)
     uri = result.get('root_uri', '?')
     print(f"Stored: {uri}")
     os.unlink(tf.name)

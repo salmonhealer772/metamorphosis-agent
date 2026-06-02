@@ -189,6 +189,7 @@ cp -r "$REPO_DIR/workspace/"* "$WORKSPACE_TARGET/"
 cd "$WORKSPACE_TARGET"
 sed -i "s/{{AGENT_NAME}}/$AGENT_NAME/g; s/{{AGENT_EMOJI}}/✨/g" IDENTITY.md
 sed -i "s/{{YOUR_NAME}}/friend/g; s/{{PREFERRED_NAME}}/friend/g; s/{{TIMEZONE}}/UTC/g" USER.md
+chmod +x ov.py
 ok "Workspace ready"
 
 # ── Ollama install helper (no sudo) ───────────────────────────────
