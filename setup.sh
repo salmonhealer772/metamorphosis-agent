@@ -190,6 +190,8 @@ cd "$WORKSPACE_TARGET"
 sed -i "s/{{AGENT_NAME}}/$AGENT_NAME/g; s/{{AGENT_EMOJI}}/✨/g" IDENTITY.md
 sed -i "s/{{YOUR_NAME}}/friend/g; s/{{PREFERRED_NAME}}/friend/g; s/{{TIMEZONE}}/UTC/g" USER.md
 chmod +x ov.py
+mkdir -p "$HOME/.local/bin"
+ln -sf "$WORKSPACE_TARGET/ov.py" "$HOME/.local/bin/ov.py"
 ok "Workspace ready"
 
 # ── Ollama install helper (no sudo) ───────────────────────────────
@@ -245,11 +247,7 @@ fi
 
 command -v ollama >/dev/null 2>&1 && ok "Ollama ready" || warn "Ollama not found — install manually"
 
-if command -v ollama >/dev/null 2>&1; then
-  info "Pulling embedding model (all-minilm)…"
-  ollama pull all-minilm 2>&1 && ok "Embedding model ready" || warn "Pull failed — run 'ollama pull all-minilm' later"
-fi
-
+# Start Ollama service BEFORE pulling model (pull needs the API running)
 if command -v ollama >/dev/null 2>&1; then
   if ! curl -s http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
     info "Starting Ollama service…"
@@ -263,6 +261,14 @@ if command -v ollama >/dev/null 2>&1; then
   curl -s http://127.0.0.1:11434/api/version >/dev/null 2>&1 \
     && ok "Ollama running on localhost:11434" \
     || warn "Ollama not reachable"
+
+  # Now pull the embedding model (service is up so this will work)
+  info "Pulling embedding model (all-minilm)…"
+  if ollama pull all-minilm 2>&1; then
+    ok "Embedding model ready"
+  else
+    warn "Pull failed — run 'ollama pull all-minilm' later"
+  fi
 fi
 
 # Auto-start Ollama on login (so it works without agent self-healing)
