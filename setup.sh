@@ -180,7 +180,7 @@ echo ""
 
 # ── Deploy workspace ───────────────────────────────────────────────
 echo -e "${BOLD}→ Deploying workspace…${NC}"
-if [ -d "$WORKSPACE_TARGET" ]; then
+if [ -d "$WORKSPACE_TARGET" ] && [ "$(ls -A "$WORKSPACE_TARGET" 2>/dev/null)" ]; then
   mv "$WORKSPACE_TARGET" "$WORKSPACE_TARGET.backup.$(date +%s)"
   echo -e "  ${DIM}Backed up existing workspace${NC}"
 fi
