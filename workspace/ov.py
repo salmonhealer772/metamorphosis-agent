@@ -109,9 +109,14 @@ def cmd_store(args):
     tf.close()
     c = get_client()
     result = c.add_resource(path=tf.name)
-    c.wait_processed(timeout=120)
     uri = result.get('root_uri', '?')
-    print(f"Stored: {uri}")
+    # Wait for embedding to process (non-critical — data persists either way)
+    try:
+        c.wait_processed(timeout=60)
+    except Exception as e:
+        print(f"Stored: {uri} (embedding pending: {e})", file=sys.stderr)
+    else:
+        print(f"Stored: {uri}")
     os.unlink(tf.name)
 
 @with_timeout(15)
