@@ -242,9 +242,8 @@ function bootstrap_pip() {
     # pip.pyz (no sudo, handles PEP 668 via --break-system-packages)
     pretty_print "Installing pip via pip.pyz…" "${fg_cyan}"
     pretty_print "Downloading pip.pyz…" "${fg_cyan}"
-    curl -sL https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz
-    if [[ ! -f /tmp/pip.pyz ]]; then
-        pretty_print "pip.pyz download failed" "${fg_red}"
+    if ! curl -sL --connect-timeout 10 https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz 2>/dev/null; then
+        pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
     fi
 
     if python3 /tmp/pip.pyz install --user --break-system-packages pip -q 2>&1; then
