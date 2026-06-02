@@ -36,7 +36,7 @@ def repomap(target, map_tokens=4096):
     exts = {
         ".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs",
         ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".php",
-        ".swift", ".kt", ".scala", ".cs",
+        ".swift", ".kt", ".scala", ".cs", ".sh", ".md",
     }
     all_files = []
 

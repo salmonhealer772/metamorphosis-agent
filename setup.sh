@@ -356,7 +356,7 @@ SEARXNG_CONF
     sleep 1
 
     # Clear old log so failure tail shows fresh error
-    rm -f /tmp/searxng_web.log
+    rm -f /tmp/searxng_web.log 2>/dev/null || true
 
     info "Starting SearXNG…"
     export SEARXNG_SETTINGS_PATH="$SEARXNG_CONF_DIR/settings.yml"
