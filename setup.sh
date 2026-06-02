@@ -265,6 +265,18 @@ if command -v ollama >/dev/null 2>&1; then
     || warn "Ollama not reachable"
 fi
 
+# Auto-start Ollama on login (so it works without agent self-healing)
+if command -v ollama >/dev/null 2>&1; then
+  if ! grep -q "ollama serve" "$HOME/.profile" 2>/dev/null; then
+    echo "" >> "$HOME/.profile"
+    echo "# Start Ollama for agent memory" >> "$HOME/.profile"
+    echo "ollama serve >/dev/null 2>&1 &" >> "$HOME/.profile"
+    ok "Ollama auto-start added to ~/.profile"
+  else
+    ok "Ollama auto-start already in ~/.profile"
+  fi
+fi
+
 # Configure OpenViking
 mkdir -p "$HOME/.openviking"
 cat > "$HOME/.openviking/ov.conf" << OVCONF
