@@ -253,24 +253,24 @@ function bootstrap_pip() {
         pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
     fi
 
-    if python3 /tmp/pip.pyz install --user --break-system-packages pip -q 2>&1; then
-        export PATH="$HOME/.local/bin:$PATH"
+    # Use local venv in project dir (portable — no ~/.local/ or ~/.openclaw/ fallout)
+    local ov_venv="$INSTALL_DIR/.openclaw/venv"
+    if python3 -m venv "$ov_venv" 2>&1; then
+        PIP_CMD="$ov_venv/bin/pip"
+        pretty_print "Created Python venv at $ov_venv"
+        return
+    fi
+
+    # Fallback: pip.pyz into the local venv
+    if python3 /tmp/pip.pyz install --break-system-packages pip -q 2>&1; then
         if python3 -m pip --version >/dev/null 2>&1; then
             PIP_CMD="python3 -m pip"
-            pretty_print "pip installed via pip.pyz ($(python3 -m pip --version | cut -d' ' -f2))"
+            pretty_print "pip installed via pip.pyz"
             return
         fi
     fi
 
-    # Final fallback: venv
-    if python3 -m venv "$HOME/.openclaw/venv" 2>&1; then
-        PIP_CMD="$HOME/.openclaw/venv/bin/pip"
-        pretty_print "Created Python venv at ~/.openclaw/venv"
-        return
-    fi
-
-    pretty_print "No pip available after trying: pip.pyz and venv." "${fg_red}"
-    pretty_print "Install pip manually or use: python3 -m venv ~/.openclaw/venv" "${fg_red}"
+    pretty_print "No pip available — install pip manually" "${fg_red}"
     exit 1
 }
 
@@ -300,7 +300,7 @@ function install_openviking_pkg() {
         pretty_print "  Continuing without vector memory." "${fg_yellow}"
     fi
 
-    mkdir -p "$HOME/.openclaw/workspace/.openviking"
+    mkdir -p "$WORKSPACE_TARGET/.openviking"
 }
 
 # ---- DESC: Install Node.js (if missing) -------------------------------------
@@ -353,7 +353,7 @@ function install_nodejs() {
 function install_openclaw() {
     if ! command -v openclaw >/dev/null 2>&1; then
         pretty_print "Installing OpenClaw…" "${fg_cyan}"
-        npm install -g openclaw --prefix="$INSTALL_DIR/.local" --prefix="$INSTALL_DIR/.local"
+        npm install -g openclaw --prefix="$INSTALL_DIR/.local"
     fi
     pretty_print "OpenClaw ready"
 }
