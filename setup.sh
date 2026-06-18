@@ -372,8 +372,10 @@ function install_openclaw() {
         # Override HOME so npm + openclaw postinstall write to tmp, not ~/
         HOME=/tmp npm install -g openclaw --prefix="$INSTALL_DIR/.local" 2>&1 || \
             npm install -g openclaw --prefix="$INSTALL_DIR/.local"
-        # Nuke any stray ~/.openclaw/ the postinstall might have created
-        rm -rf "$HOME/.openclaw" 2>/dev/null || true
+        # Move any stray ~/.openclaw/ into project dir
+        if [[ -d "$HOME/.openclaw" ]]; then
+            mv "$HOME/.openclaw" "$INSTALL_DIR/.leaks/.openclaw-npm" 2>/dev/null || rm -rf "$HOME/.openclaw" 2>/dev/null || true
+        fi
     fi
     pretty_print "OpenClaw ready"
 }
@@ -639,8 +641,10 @@ function bootstrap_openclaw() {
         pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
     # Clean up temp home
     rm -rf "$oc_home" 2>/dev/null || true
-    # Also nuke any stray ~/.openclaw/ the first openclaw call made
-    rm -rf "$HOME/.openclaw" 2>/dev/null || true
+    # Move any stray ~/.openclaw/ into project dir
+    if [[ -d "$HOME/.openclaw" ]]; then
+        mv "$HOME/.openclaw" "$INSTALL_DIR/.leaks/.openclaw-onboard" 2>/dev/null || rm -rf "$HOME/.openclaw" 2>/dev/null || true
+    fi
 }
 
 # ---- DESC: Main control flow --------------------------------------------------
@@ -693,30 +697,15 @@ RUNEOF
 
 # ---- DESC: Clean up stray user-level files from setup ------------------------
 function cleanup_portable() {
-    # npm always creates ~/.npm/ — redirect cache and clean up
-    if [[ -d "$HOME/.npm" ]]; then
-        rm -rf "$HOME/.npm" 2>/dev/null || true
-    fi
+    local backup_dir="$INSTALL_DIR/.leaks"
+    mkdir -p "$backup_dir"
 
-    # OpenClaw's onboard may write to ~/.openclaw/ even with OPENCLAW_STATE_DIR
-    if [[ -d "$HOME/.openclaw" ]]; then
-        rm -rf "$HOME/.openclaw" 2>/dev/null || true
-    fi
-
-    # Any stray openclaw config profiles from --profile
-    if [[ -d "$HOME/.openclaw-metamorphosis" ]]; then
-        rm -rf "$HOME/.openclaw-metamorphosis" 2>/dev/null || true
-    fi
-
-    # pip --user writes to ~/.local/ — off we go
-    if [[ -d "$HOME/.local" ]]; then
-        rm -rf "$HOME/.local" 2>/dev/null || true
-    fi
-
-    # openviking library init may create ~/.openviking/
-    if [[ -d "$HOME/.openviking" ]]; then
-        rm -rf "$HOME/.openviking" 2>/dev/null || true
-    fi
+    # Move any stray files from ~/ into the project dir instead of deleting
+    for dir in .npm .openclaw .openclaw-metamorphosis .local .openviking; do
+        if [[ -d "$HOME/$dir" ]]; then
+            mv "$HOME/$dir" "$backup_dir/$dir" 2>/dev/null || rm -rf "$HOME/$dir" 2>/dev/null || true
+        fi
+    done
 
     pretty_print "Portable setup complete — no files left in ~/"
 }
