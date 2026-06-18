@@ -353,9 +353,11 @@ function install_nodejs() {
 function install_openclaw() {
     if ! command -v openclaw >/dev/null 2>&1; then
         pretty_print "Installing OpenClaw…" "${fg_cyan}"
-        # Keep npm cache local to avoid ~/.npm/
-        export npm_config_cache="$INSTALL_DIR/.npm-cache"
-        npm install -g openclaw --prefix="$INSTALL_DIR/.local"
+        # Override HOME so npm + openclaw postinstall write to tmp, not ~/
+        HOME=/tmp npm install -g openclaw --prefix="$INSTALL_DIR/.local" 2>&1 || \
+            npm install -g openclaw --prefix="$INSTALL_DIR/.local"
+        # Nuke any stray ~/.openclaw/ the postinstall might have created
+        rm -rf "$HOME/.openclaw" 2>/dev/null || true
     fi
     pretty_print "OpenClaw ready"
 }
@@ -697,6 +699,8 @@ function main() {
     REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
     INSTALL_DIR="$REPO_DIR"
     WORKSPACE_TARGET="$INSTALL_DIR/.openclaw/workspace"
+    # Redirect npm cache to local dir before any npm command runs
+    export npm_config_cache="$INSTALL_DIR/.npm-cache"
 
     print_banner
     check_prerequisites
