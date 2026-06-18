@@ -631,11 +631,15 @@ function bootstrap_openclaw() {
     pretty_print "Configuring OpenClaw…" "${ta_bold}"
     export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
     export OPENCLAW_DIR="$WORKSPACE_TARGET"
-    # Override HOME so openclaw postinstall/config writes go to local dir, not ~/
-    HOME=/tmp "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
-    HOME=/tmp "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
+    # Use a writable tmp HOME so openclaw doesn't touch ~/ or fail on /tmp
+    local oc_home="$INSTALL_DIR/.tmp-oc-home"
+    mkdir -p "$oc_home"
+    HOME="$oc_home" "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
+    HOME="$oc_home" "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
         pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
-    # Nuke any stray ~/.openclaw/ that onboard might have created
+    # Clean up temp home
+    rm -rf "$oc_home" 2>/dev/null || true
+    # Also nuke any stray ~/.openclaw/ the first openclaw call made
     rm -rf "$HOME/.openclaw" 2>/dev/null || true
 }
 
