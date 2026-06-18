@@ -10,13 +10,7 @@ Based on the audit of what worked vs what didn't out of the box.
 - **Fix:** Add `cp -r "$REPO_DIR/plans/"* "$HOME/plans/" 2>/dev/null || true` next to the scripts copy
 - **EFFORT:** 🟢 1 line
 
-### 2. Start SearXNG after install
-- **File:** `setup.sh`
-- **Status:** Clones + installs pip deps but never starts the service
-- **Fix:** Add `~/searxng/start.sh &` at the end of the SearXNG section (it backgrounds itself, so it won't block)
-- **EFFORT:** 🟢 1 line
-
-### 3. Fix OpenViking config format
+### 2. Fix OpenViking config format
 - **File:** `setup.sh`
 - **Status:** Writes INI-format config but OpenViking v0.3.22 expects JSON with specific fields (`api_base` needs `/v1` suffix)
 - **Fix:** Replace the heredoc with a JSON config file matching what v0.3.22 expects
@@ -51,9 +45,6 @@ Based on the audit of what worked vs what didn't out of the box.
 - **Effort:** 🟡 Unknown
 
 ## Deferred (Ask User First)
-
-### 9. SearXNG auto-start on boot
-- **Effort:** 🟠 Needs systemd or cron — user may not want
 
 ---
 

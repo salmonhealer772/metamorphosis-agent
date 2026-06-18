@@ -35,7 +35,7 @@ workspace/
 ├── SOUL.md          # Personality — direct, helpful, no filler
 ├── IDENTITY.md      # Your agent's name, emoji, self-description
 ├── USER.md          # Who you are — name, timezone, preferences
-├── TOOLS.md         # Local infra — OpenViking, SearXNG, RepoMap
+├── TOOLS.md         # Local infra — OpenViking, RepoMap
 ├── HEARTBEAT.md     # Periodic health checks, memory maintenance tasks
 ├── MEMORY.md        # Curated long-term memory index (agent-maintained)
 ├── ov.py            # OpenViking CLI — semantic vector memory (on PATH)
@@ -44,8 +44,6 @@ workspace/
 
 scripts/
 ├── repomap              # Codebase understanding (tree-sitter + PageRank)
-├── start-searxng.sh     # Start private search
-├── stop-searxng.sh      # Stop private search
 ├── setup-warp-oss.sh    # Warp OSS builder (remote)
 ├── build-warp.sh        # Warp OSS builder (local)
 └── verify-openviking.sh # Memory health check
@@ -61,10 +59,10 @@ tracks every subsystem. On startup it reads this file and proactively reports
 anything that's down:
 
 > "Btw, Ollama isn't running — starting it now."
-> "SearXNG is down — restarting it."
+> "Disk is getting full."
 
 Ask "how do you feel?" and it runs a live scan of Ollama, OpenViking, embeddings
-model, disk space, RepoMap, and SearXNG — then reports structured status for
+model, disk space, and RepoMap — then reports structured status for
 each. It reads health-state.json and reports actual service statuses — this is part of its identity in SOUL.md, not a checklist task.
 
 ## Memory — cross-session, persistent
@@ -84,17 +82,6 @@ ov.py status
 ```
 
 `ov.py` is on PATH (`~/.local/bin/ov.py`). No `cd` required.
-
-## Private search — SearXNG
-
-Self-hosted at `localhost:8888`. No Google, no tracking.
-
-Always on by default — auto-starts during setup and on every login via
-`~/.profile`. The module import issue (ModuleNotFoundError from running
-outside the clone directory) is fixed by `cd ~/searxng` before launch.
-
-The agent can stop SearXNG with `~/scripts/stop-searxng.sh` if needed,
-but default is always available.
 
 ## Behavioral guardrails
 

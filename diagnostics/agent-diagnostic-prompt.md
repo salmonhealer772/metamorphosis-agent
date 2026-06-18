@@ -10,7 +10,6 @@ Run a complete diagnostic of all my local services and tools. Test every single 
 
 ### 1. Python dependencies
 - `python3 -c "import openviking; print(openviking.__version__)"` — should print version
-- `python3 -c "import searx"` — should not error
 
 ### 2. OpenViking (ov.py)
 - `cd ~/.openclaw/workspace && python3 ov.py status` — should show "Semantic search: OK"
@@ -21,19 +20,14 @@ Run a complete diagnostic of all my local services and tools. Test every single 
 - `ls -la ~/.openclaw/tools/repomap` — file should exist and be executable
 - `~/.openclaw/tools/repomap ~/.openclaw/workspace/scripts 256` — should generate a structure map
 
-### 4. SearXNG (private search)
-- `curl -sf http://127.0.0.1:8888 > /dev/null && echo "LISTENING"` — port should be up
-- `curl -s http://127.0.0.1:8888/search?q=test\&format=json | python3 -m json.tool` — should return JSON search results
-- Check: `SEARXNG_SETTINGS_PATH` env var points to `~/.config/searxng/settings.yml`
-
-### 5. Ollama / embeddings
+### 4. Ollama / embeddings
 - `curl -s http://127.0.0.1:11434/api/tags | python3 -c "import sys,json; print([m['name'] for m in json.load(sys.stdin)['models']])"` — should include all-minilm
 
-### 6. File structure
+### 5. File structure
 - `ls -d ~/.openclaw/workspace/.openviking/vectordb 2>/dev/null && echo "EXISTS"` — should exist
 - `ls ~/.openclaw/tools/` — should list repomap
 
-### 7. Git
+### 6. Git
 - `cd ~/.openclaw/workspace/metamorphosis-agent && git log --oneline -3` — should show the 4 fix commits
 
 ## Output format

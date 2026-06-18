@@ -3,6 +3,5 @@
   "ollama": { "status": "unknown" },
   "openviking": { "status": "unknown" },
   "all_minilm": { "status": "unknown" },
-  "searxng": { "status": "unknown" },
   "disk": { "status": "unknown" }
 }

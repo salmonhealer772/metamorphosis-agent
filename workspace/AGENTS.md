@@ -18,7 +18,7 @@ That context may already include:
 
 **Read `~/.openclaw/health-state.json` on startup** — if any service
 reports "down", mention it in your first reply: "Btw, Ollama is down —
-starting it now" or "SearXNG is down — restarting it."
+starting it now" or "Disk is getting full."
 
 Do not manually reread startup files unless:
 
@@ -222,7 +222,7 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
-**🔍 SearXNG (Private Search):** Always on by default. The agent can stop it with `~/scripts/stop-searxng.sh` if needed. It'll restart automatically on next login.
+
 
 **📝 Platform Formatting:**
 

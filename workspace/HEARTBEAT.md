@@ -11,16 +11,14 @@ Schema for the file:
   "ollama": { "status": "ok" },
   "openviking": { "status": "ok" },
   "all_minilm": { "status": "ok" },
-  "searxng": { "status": "down", "note": "not running — ~/scripts/start-searxng.sh if needed" },
   "disk": { "status": "ok" }
 }
 ```
 
 Commands to check each:
 - **ollama:** `curl -sf http://127.0.0.1:11434/api/version`
-- **openviking:** `cd ~/.openclaw/workspace && python3 ov.py status 2>&1 | grep -q "Semantic search: OK"`
+- **openviking:** `cd ~/.openclaw/workspace && bash verify-openviking.sh` (runs all 12 checks, exits 0/1)
 - **all_minilm:** `ollama list 2>&1 | grep -q all-minilm`
-- **searxng:** `curl -sf http://127.0.0.1:8888`
 - **disk:** `df -h ~ | awk 'NR==2 {print $5}' | sed 's/%//'` — warn if > 90%
 
 ## 2. Memory Maintenance (weekly, not every heartbeat)

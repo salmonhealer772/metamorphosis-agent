@@ -510,96 +510,6 @@ OVCONF
     pretty_print "  python3 ov.py status       — health" "${fg_cyan}"
 }
 
-# ---- DESC: Install and configure SearXNG ------------------------------------
-function setup_searxng() {
-    echo ""
-    pretty_print "Private Search (SearXNG)" "${ta_bold}"
-    pretty_print "Self-hosted search engine. No Google tracking." "${fg_cyan}"
-
-    local searxng_port=8888
-    local searxng_conf_dir="$HOME/.config/searxng"
-
-    if [[ ! -d "$HOME/searxng" ]]; then
-        pretty_print "Cloning SearXNG…" "${fg_cyan}"
-        git clone --depth 1 https://github.com/searxng/searxng.git "$HOME/searxng" 2>&1 || {
-            pretty_print "SearXNG clone failed — skipping" "${fg_yellow}"
-            cd "$orig_cwd" 2>/dev/null || true
-            return
-        }
-    fi
-
-    if [[ ! -d "$HOME/searxng" ]]; then
-        return
-    fi
-
-    cd "$HOME/searxng"
-
-    # msgspec must be installed first (SearXNG imports it at module level)
-    if python3 -c "import msgspec" 2>/dev/null; then
-        pretty_print "msgspec already installed"
-    else
-        pretty_print "Installing msgspec (required by SearXNG build)…" "${fg_cyan}"
-        $PIP_INSTALL msgspec -q 2>&1 || pretty_print "msgspec install failed" "${fg_yellow}"
-    fi
-
-    if python3 -c "import searx" 2>/dev/null; then
-        pretty_print "SearXNG already installed"
-    else
-        pretty_print "Installing SearXNG Python package…" "${fg_cyan}"
-        $PIP_INSTALL -e . 2>&1 || pretty_print "SearXNG install had issues" "${fg_yellow}"
-    fi
-
-    # Verify SearXNG is importable
-    if python3 -c "import searx" 2>/dev/null; then
-        pretty_print "SearXNG import verified"
-    else
-        pretty_print "SearXNG install may need reinstall" "${fg_yellow}"
-    fi
-
-    mkdir -p "$searxng_conf_dir"
-    local searxng_secret
-    searxng_secret=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
-    cat > "$searxng_conf_dir/settings.yml" << SEARXNG_CONF
-use_default_settings: true
-server:
-  secret_key: "$searxng_secret"
-  bind_address: "127.0.0.1"
-  port: $searxng_port
-SEARXNG_CONF
-
-    pretty_print "SearXNG configured at $searxng_conf_dir/settings.yml"
-
-    # Auto-start SearXNG (always on by default)
-    pretty_print "Starting SearXNG..." "${fg_cyan}"
-    pkill -f "searx.webapp" 2>/dev/null || true
-    sleep 1
-    rm -f /tmp/searxng_web.log 2>/dev/null || true
-    export SEARXNG_SETTINGS_PATH="$searxng_conf_dir/settings.yml"
-    nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &
-    for i in 1 2 3 4 5 6 7 8; do
-        sleep 2
-        if curl -sf "http://127.0.0.1:$searxng_port" >/dev/null 2>&1; then
-            pretty_print "SearXNG running on http://127.0.0.1:$searxng_port"
-            break
-        fi
-        if [[ $i -eq 8 ]]; then
-            pretty_print "SearXNG failed to start - check /tmp/searxng_web.log" "${fg_yellow}"
-        fi
-    done
-
-    # Auto-start on login
-    if ! grep -q "searx.webapp" "$HOME/.profile" 2>/dev/null; then
-        echo "" >> "$HOME/.profile"
-        echo "# Start SearXNG for private search" >> "$HOME/.profile"
-        echo "export SEARXNG_SETTINGS_PATH=\$HOME/.config/searxng/settings.yml" >> "$HOME/.profile"
-        echo "cd \$HOME/searxng && nohup python3 -m searx.webapp > /tmp/searxng_web.log 2>&1 &" >> "$HOME/.profile"
-        pretty_print "SearXNG auto-start added to ~/.profile"
-    fi
-
-    pretty_print "SearXNG always on - stop with ~/scripts/stop-searxng.sh if needed" "${fg_cyan}"
-    cd "$orig_cwd" 2>/dev/null || true
-}
-
 # ---- DESC: Deploy scripts and tools ------------------------------------------
 function deploy_scripts() {
     mkdir -p "$HOME/scripts"
@@ -666,7 +576,6 @@ function init_health_state() {
     local ollama_status="down"
     local openviking_status="down"
     local model_status="down"
-    local searxng_status="down"
     local disk_pct
 
     curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
@@ -675,7 +584,6 @@ function init_health_state() {
         python3 ov.py status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
         ollama list 2>&1 | grep -q all-minilm && model_status="ok"
     fi
-    curl -sf http://127.0.0.1:8888 >/dev/null 2>&1 && searxng_status="ok"
     disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
 
     mkdir -p "$(dirname "$health_file")"
@@ -685,7 +593,6 @@ function init_health_state() {
   "ollama": { "status": "$ollama_status" },
   "openviking": { "status": "$openviking_status" },
   "all_minilm": { "status": "$model_status" },
-  "searxng": { "status": "$searxng_status" },
   "disk": { "status": "ok", "usage_pct": $disk_pct }
 }
 EOF
@@ -713,7 +620,6 @@ function main() {
     gather_identity
     deploy_workspace
     setup_vector_memory
-    setup_searxng
     deploy_scripts
     clone_repo_into_workspace
     bootstrap_openclaw
