@@ -353,6 +353,8 @@ function install_nodejs() {
 function install_openclaw() {
     if ! command -v openclaw >/dev/null 2>&1; then
         pretty_print "Installing OpenClaw…" "${fg_cyan}"
+        # Keep npm cache local to avoid ~/.npm/
+        export npm_config_cache="$INSTALL_DIR/.npm-cache"
         npm install -g openclaw --prefix="$INSTALL_DIR/.local"
     fi
     pretty_print "OpenClaw ready"
@@ -657,10 +659,31 @@ cd "$(dirname "$0")"
 export OPENCLAW_STATE_DIR="$(pwd)/.openclaw"
 export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
+export npm_config_cache="$(pwd)/.npm-cache"
 exec "$(pwd)/.local/bin/openclaw" "$@"
 RUNEOF
     chmod +x "$INSTALL_DIR/run.sh"
     pretty_print "Run script: ./run.sh"
+}
+
+# ---- DESC: Clean up stray user-level files from setup ------------------------
+function cleanup_portable() {
+    # npm always creates ~/.npm/ — redirect cache and clean up
+    if [[ -d "$HOME/.npm" ]]; then
+        rm -rf "$HOME/.npm" 2>/dev/null || true
+    fi
+
+    # OpenClaw's onboard may write to ~/.openclaw/ even with OPENCLAW_STATE_DIR
+    if [[ -d "$HOME/.openclaw" ]]; then
+        rm -rf "$HOME/.openclaw" 2>/dev/null || true
+    fi
+
+    # Any stray openclaw config profiles from --profile
+    if [[ -d "$HOME/.openclaw-metamorphosis" ]]; then
+        rm -rf "$HOME/.openclaw-metamorphosis" 2>/dev/null || true
+    fi
+
+    pretty_print "Portable setup complete — no files left in ~/"
 }
 
 function main() {
@@ -690,6 +713,7 @@ function main() {
     bootstrap_openclaw
     init_health_state
     write_run_script
+    cleanup_portable
 
     echo ""
     pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"
