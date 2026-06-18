@@ -448,8 +448,10 @@ function deploy_workspace() {
     cp -r "$REPO_DIR/workspace/"* "$workspace_target/"
     shopt -u dotglob
     cd "$workspace_target"
-    sed -i "s/{{AGENT_NAME}}/$AGENT_NAME/g; s/{{AGENT_EMOJI}}/✨/g" IDENTITY.md
-    sed -i "s/{{YOUR_NAME}}/friend/g; s/{{PREFERRED_NAME}}/friend/g; s/{{TIMEZONE}}/UTC/g" USER.md
+    # Escape special sed chars and use | delimiter to avoid clashes
+    local sn="${AGENT_NAME//\\/\\\\}"; sn="${sn//|/\|}"; sn="${sn//&/\\&}"
+    sed -i "s|{{AGENT_NAME}}|$sn|g; s|{{AGENT_EMOJI}}|✨|g" IDENTITY.md
+    sed -i "s|{{YOUR_NAME}}|friend|g; s|{{PREFERRED_NAME}}|friend|g; s|{{TIMEZONE}}|UTC|g" USER.md
     chmod +x ov.py
     pretty_print "Workspace ready"
 }
