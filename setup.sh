@@ -253,7 +253,7 @@ function bootstrap_pip() {
         pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
     fi
 
-    # Use local venv in project dir (portable — no ~/.local/ or ~/.openclaw/ fallout)
+    # Use local venv in project dir — avoids ~/.local/, ~/.openviking/ entirely
     local ov_venv="$INSTALL_DIR/.openclaw/venv"
     if python3 -m venv "$ov_venv" 2>&1; then
         PIP_CMD="$ov_venv/bin/pip"
@@ -261,11 +261,23 @@ function bootstrap_pip() {
         return
     fi
 
-    # Fallback: pip.pyz into the local venv
+    # Try virtualenv as fallback (can be installed via pip.pyz)
+    if ! python3 -c "import virtualenv" 2>/dev/null; then
+        python3 /tmp/pip.pyz install --break-system-packages virtualenv -q 2>/dev/null || true
+    fi
+    if python3 -c "import virtualenv" 2>/dev/null; then
+        python3 -m virtualenv "$ov_venv" 2>&1 && {
+            PIP_CMD="$ov_venv/bin/pip"
+            pretty_print "Created Python venv via virtualenv"
+            return
+        }
+    fi
+
+    # Last resort: use system pip with --prefix to redirect locally
     if python3 /tmp/pip.pyz install --break-system-packages pip -q 2>&1; then
         if python3 -m pip --version >/dev/null 2>&1; then
             PIP_CMD="python3 -m pip"
-            pretty_print "pip installed via pip.pyz"
+            pretty_print "pip via pip.pyz (local prefix only)"
             return
         fi
     fi
@@ -276,9 +288,13 @@ function bootstrap_pip() {
 
 # ---- DESC: Set up PIP_INSTALL helper variable --------------------------------
 function setup_pip_install() {
-    PIP_INSTALL="$PIP_CMD install --user --break-system-packages"
-    if echo "$PIP_CMD" | grep -q "/venv/bin/pip"; then
-        PIP_INSTALL="$PIP_CMD install"
+    PIP_INSTALL="$PIP_CMD install"
+    # When using system pip (no venv), redirect to local target dir
+    if ! echo "$PIP_CMD" | grep -q "/venv/bin/pip"; then
+        local py_libs="$INSTALL_DIR/.openclaw/py-libs"
+        PIP_INSTALL="$PIP_CMD install --target=$py_libs --break-system-packages"
+        # Add target to Python path so imports work
+        export PYTHONPATH="$py_libs:${PYTHONPATH:-}"
     fi
 }
 
@@ -615,9 +631,12 @@ function bootstrap_openclaw() {
     pretty_print "Configuring OpenClaw…" "${ta_bold}"
     export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
     export OPENCLAW_DIR="$WORKSPACE_TARGET"
-    "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
-    "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
+    # Override HOME so openclaw postinstall/config writes go to local dir, not ~/
+    HOME=/tmp "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
+    HOME=/tmp "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
         pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
+    # Nuke any stray ~/.openclaw/ that onboard might have created
+    rm -rf "$HOME/.openclaw" 2>/dev/null || true
 }
 
 # ---- DESC: Main control flow --------------------------------------------------
@@ -683,6 +702,16 @@ function cleanup_portable() {
     # Any stray openclaw config profiles from --profile
     if [[ -d "$HOME/.openclaw-metamorphosis" ]]; then
         rm -rf "$HOME/.openclaw-metamorphosis" 2>/dev/null || true
+    fi
+
+    # pip --user writes to ~/.local/ — off we go
+    if [[ -d "$HOME/.local" ]]; then
+        rm -rf "$HOME/.local" 2>/dev/null || true
+    fi
+
+    # openviking library init may create ~/.openviking/
+    if [[ -d "$HOME/.openviking" ]]; then
+        rm -rf "$HOME/.openviking" 2>/dev/null || true
     fi
 
     pretty_print "Portable setup complete — no files left in ~/"
