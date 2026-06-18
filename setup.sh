@@ -51,6 +51,13 @@ function parse_params() {
             -nc | --no-colour)
                 no_colour=true
                 ;;
+            -e | --env-file)
+                if [[ $# -eq 0 ]]; then
+                    script_exit "--env-file requires a file path argument" 1
+                fi
+                ENV_FILE="$1"
+                shift
+                ;;
             *)
                 script_exit "Invalid parameter was provided: $param" 1
                 ;;
@@ -356,6 +363,23 @@ function install_openclaw() {
     pretty_print "OpenClaw ready"
 }
 
+# ---- DESC: Read a key from a .env file (export-style, no export needed) ------
+function env_file_lookup() {
+    local file="$1"
+    local key="$2"
+    if [[ ! -f "$file" ]]; then
+        return 1
+    fi
+    # Match KEY=value or export KEY=value, with optional quotes around value
+    local val
+    val=$(grep -E "^(export[[:space:]]+)?${key}=" "$file" 2>/dev/null | head -1 | sed -E 's/^(export[[:space:]]+)?[^=]+=//' | sed -E 's/^["\x27]//;s/["\x27]$//')
+    if [[ -n "$val" ]]; then
+        printf '%s' "$val"
+        return 0
+    fi
+    return 1
+}
+
 # ---- DESC: Gather agent identity from user -----------------------------------
 function gather_identity() {
     echo ""
@@ -377,20 +401,41 @@ function gather_identity() {
 
     AUTH_CHOICE=""
     CLI_FLAG=""
+    local env_key=""
     case "$PROVIDER_IDX" in
-        1) AUTH_CHOICE="deepseek-api-key";    CLI_FLAG="--deepseek-api-key";;
-        2) AUTH_CHOICE="openai-api-key";      CLI_FLAG="--openai-api-key";;
-        3) AUTH_CHOICE="apiKey";              CLI_FLAG="--anthropic-api-key";;
-        4) AUTH_CHOICE="gemini-api-key";      CLI_FLAG="--gemini-api-key";;
-        5) AUTH_CHOICE="openrouter-api-key";  CLI_FLAG="--openrouter-api-key";;
-        6) AUTH_CHOICE="together-api-key";    CLI_FLAG="--together-api-key";;
-        7) AUTH_CHOICE="xai-api-key";         CLI_FLAG="--xai-api-key";;
-        8) AUTH_CHOICE="mistral-api-key";     CLI_FLAG="--mistral-api-key";;
-        9) AUTH_CHOICE="fireworks-api-key";   CLI_FLAG="--fireworks-api-key";;
+        1) AUTH_CHOICE="deepseek-api-key";    CLI_FLAG="--deepseek-api-key";    env_key="DEEPSEEK_API_KEY";;
+        2) AUTH_CHOICE="openai-api-key";      CLI_FLAG="--openai-api-key";      env_key="OPENAI_API_KEY";;
+        3) AUTH_CHOICE="apiKey";              CLI_FLAG="--anthropic-api-key";   env_key="ANTHROPIC_API_KEY";;
+        4) AUTH_CHOICE="gemini-api-key";      CLI_FLAG="--gemini-api-key";      env_key="GEMINI_API_KEY";;
+        5) AUTH_CHOICE="openrouter-api-key";  CLI_FLAG="--openrouter-api-key";  env_key="OPENROUTER_API_KEY";;
+        6) AUTH_CHOICE="together-api-key";    CLI_FLAG="--together-api-key";    env_key="TOGETHER_API_KEY";;
+        7) AUTH_CHOICE="xai-api-key";         CLI_FLAG="--xai-api-key";         env_key="XAI_API_KEY";;
+        8) AUTH_CHOICE="mistral-api-key";     CLI_FLAG="--mistral-api-key";     env_key="MISTRAL_API_KEY";;
+        9) AUTH_CHOICE="fireworks-api-key";   CLI_FLAG="--fireworks-api-key";   env_key="FIREWORKS_API_KEY";;
         *) pretty_print "Invalid choice" "${fg_red}"; exit 1;;
     esac
 
-    read -rp "  Paste your API key: " API_KEY
+    # Try to read API key from env file, then fall back to prompt
+    API_KEY=""
+    if [[ -n "${ENV_FILE:-}" ]]; then
+        API_KEY=$(env_file_lookup "$ENV_FILE" "$env_key")
+        if [[ -z "$API_KEY" ]]; then
+            # Fallback: try generic names
+            API_KEY=$(env_file_lookup "$ENV_FILE" "LLM_API_KEY")
+        fi
+        if [[ -z "$API_KEY" ]]; then
+            API_KEY=$(env_file_lookup "$ENV_FILE" "API_KEY")
+        fi
+        if [[ -n "$API_KEY" ]]; then
+            pretty_print "API key read from $ENV_FILE (${env_key})"
+        else
+            pretty_print "No API key found in $ENV_FILE — falling back to manual entry" "${fg_yellow}"
+        fi
+    fi
+
+    if [[ -z "$API_KEY" ]]; then
+        read -rp "  Paste your API key: " API_KEY
+    fi
     echo ""
 }
 

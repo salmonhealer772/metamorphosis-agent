@@ -27,6 +27,15 @@ chmod +x setup.sh && ./setup.sh
 
 No sudo required. Supports `--help`, `--verbose`, `--no-colour`.
 
+To skip the API key prompt, pass a `.env` file:
+
+```bash
+# .env file (provider-specific key name or generic LLM_API_KEY / API_KEY)
+DEEPSEEK_API_KEY=sk-abc123...
+
+./setup.sh --env-file .env
+```
+
 ## What you get
 
 ```
