@@ -205,13 +205,13 @@ function print_banner() {
 # ---- DESC: Check system prerequisites ----------------------------------------
 function check_prerequisites() {
     pretty_print "Checking system…" "${fg_cyan}"
-    for cmd in git curl python3 node npm; do
+    for cmd in git curl python3; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             pretty_print "$cmd not found — install it first" "${fg_red}"
             exit 1
         fi
     done
-    pretty_print "Prerequisites: git, curl, python3, node, npm"
+    pretty_print "Prerequisites: git, curl, python3"
 }
 
 # ---- DESC: Detect OS/distro --------------------------------------------------
@@ -294,6 +294,57 @@ function install_openviking_pkg() {
     fi
 
     mkdir -p "$HOME/.openclaw/workspace/.openviking"
+}
+
+# ---- DESC: Install Node.js (if missing) -------------------------------------
+function install_nodejs() {
+    if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+        return
+    fi
+
+    local arch
+    case "$(uname -m)" in
+        x86_64)  arch="x64" ;;
+        aarch64) arch="arm64" ;;
+        *)       pretty_print "Unsupported arch for auto Node.js install: $(uname -m)" "${fg_yellow}"
+                 pretty_print "Install Node.js 18+ manually, then rerun setup" "${fg_yellow}"
+                 exit 1 ;;
+    esac
+
+    pretty_print "Installing Node.js…" "${fg_cyan}"
+
+    local node_version="v22.14.0"
+    local url="https://nodejs.org/dist/${node_version}/node-${node_version}-linux-${arch}.tar.xz"
+    local dest="$HOME/.local"
+
+    mkdir -p "$dest"
+    export PATH="$dest/bin:$PATH"
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    local tarball="$tmpdir/node.tar.xz"
+
+    curl -fsSL "$url" -o "$tarball" || {
+        pretty_print "Node.js download failed" "${fg_red}"
+        rm -rf "$tmpdir"
+        exit 1
+    }
+
+    # Extract full Node.js tree into ~/.local/
+    tar -xf "$tarball" -C "$tmpdir" --strip-components=1
+
+    # Copy everything (bin/, lib/, include/, share/) into ~/.local/
+    # This preserves npm's dependency on lib/node_modules/npm/
+    cp -r "$tmpdir/"* "$dest/"
+
+    rm -rf "$tmpdir"
+
+    # Ensure ~/.local/bin is on PATH for this session and future logins
+    if ! grep -q '.local/bin' "$HOME/.profile" 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
+    fi
+
+    pretty_print "Node.js $(node --version) installed in ~/.local/"
 }
 
 # ---- DESC: Install or verify OpenClaw CLI ------------------------------------
@@ -616,6 +667,7 @@ function main() {
     bootstrap_pip
     setup_pip_install
     install_openviking_pkg
+    install_nodejs
     install_openclaw
     gather_identity
     deploy_workspace
