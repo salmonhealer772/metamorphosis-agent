@@ -3,7 +3,7 @@
 import openviking as ov
 import tempfile, os, json, time, sys, shutil
 
-OV_DIR = os.path.expanduser("~/.openclaw/workspace/.openviking")
+OV_DIR = os.environ.get("OPENCLAW_DIR", os.path.expanduser("~/.openclaw/workspace")) + "/.openviking"
 MARKER = os.environ.get("OV_VERIFY_MARKER", f"OV_VERIFY_{int(time.time())}")
 
 client = ov.SyncOpenViking(path=OV_DIR)

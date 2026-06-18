@@ -322,7 +322,7 @@ function install_nodejs() {
 
     local node_version="v22.14.0"
     local url="https://nodejs.org/dist/${node_version}/node-${node_version}-linux-${arch}.tar.xz"
-    local dest="$HOME/.local"
+    local dest="$INSTALL_DIR/.local"
 
     mkdir -p "$dest"
     export PATH="$dest/bin:$PATH"
@@ -337,28 +337,23 @@ function install_nodejs() {
         exit 1
     }
 
-    # Extract full Node.js tree into ~/.local/
+    # Extract full Node.js tree into $INSTALL_DIR/.local/
     tar -xf "$tarball" -C "$tmpdir" --strip-components=1
 
-    # Copy everything (bin/, lib/, include/, share/) into ~/.local/
+    # Copy everything (bin/, lib/, include/, share/) into $INSTALL_DIR/.local/
     # This preserves npm's dependency on lib/node_modules/npm/
     cp -r "$tmpdir/"* "$dest/"
 
     rm -rf "$tmpdir"
 
-    # Ensure ~/.local/bin is on PATH for this session and future logins
-    if ! grep -q '.local/bin' "$HOME/.profile" 2>/dev/null; then
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
-    fi
-
-    pretty_print "Node.js $(node --version) installed in ~/.local/"
+    pretty_print "Node.js $(node --version) installed in $INSTALL_DIR/.local/"
 }
 
 # ---- DESC: Install or verify OpenClaw CLI ------------------------------------
 function install_openclaw() {
     if ! command -v openclaw >/dev/null 2>&1; then
         pretty_print "Installing OpenClaw…" "${fg_cyan}"
-        npm install -g openclaw
+        npm install -g openclaw --prefix="$INSTALL_DIR/.local" --prefix="$INSTALL_DIR/.local"
     fi
     pretty_print "OpenClaw ready"
 }
@@ -441,7 +436,7 @@ function gather_identity() {
 
 # ---- DESC: Deploy workspace files --------------------------------------------
 function deploy_workspace() {
-    local workspace_target="${OPENCLAW_DIR:-$HOME/.openclaw/workspace}"
+    local workspace_target="$WORKSPACE_TARGET"
 
     pretty_print "Deploying workspace…" "${fg_cyan}"
     if [[ -d "$workspace_target" ]] && [[ "$(ls -A "$workspace_target" 2>/dev/null)" ]]; then
@@ -456,15 +451,13 @@ function deploy_workspace() {
     sed -i "s/{{AGENT_NAME}}/$AGENT_NAME/g; s/{{AGENT_EMOJI}}/✨/g" IDENTITY.md
     sed -i "s/{{YOUR_NAME}}/friend/g; s/{{PREFERRED_NAME}}/friend/g; s/{{TIMEZONE}}/UTC/g" USER.md
     chmod +x ov.py
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$workspace_target/ov.py" "$HOME/.local/bin/ov.py"
     pretty_print "Workspace ready"
 }
 
 # ---- DESC: Install Ollama locally (no sudo) ----------------------------------
 function install_ollama_local() {
     local url="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.zst"
-    local dest="$HOME/.local"
+    local dest="$INSTALL_DIR/.local"
 
     mkdir -p "$dest/bin"
     export PATH="$dest/bin:$PATH"
@@ -494,10 +487,6 @@ PYEOF
 
     OLLAMA_URL="$url" OLLAMA_DEST="$dest" python3 "$dl_script" || true
     rm -f "$dl_script"
-
-    if ! grep -q '.local/bin' "$HOME/.profile" 2>/dev/null; then
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
-    fi
 }
 
 # ---- DESC: Set up Ollama + OpenViking memory system --------------------------
@@ -553,24 +542,14 @@ function setup_vector_memory() {
         pretty_print "Ollama not found — install manually" "${fg_yellow}"
     fi
 
-    # Auto-start Ollama on login
-    if command -v ollama >/dev/null 2>&1; then
-        if ! grep -q "ollama serve" "$HOME/.profile" 2>/dev/null; then
-            echo "" >> "$HOME/.profile"
-            echo "# Start Ollama for agent memory" >> "$HOME/.profile"
-            echo "ollama serve >/dev/null 2>&1 &" >> "$HOME/.profile"
-            pretty_print "Ollama auto-start added to ~/.profile"
-        else
-            pretty_print "Ollama auto-start already in ~/.profile"
-        fi
-    fi
-
     # Configure OpenViking
-    mkdir -p "$HOME/.openviking"
-    cat > "$HOME/.openviking/ov.conf" << OVCONF
+    mkdir -p "$INSTALL_DIR/.openviking"
+    local ov_data_dir="$WORKSPACE_TARGET/.openviking"
+    mkdir -p "$ov_data_dir"
+    cat > "$INSTALL_DIR/.openviking/ov.conf" << OVCONF
 {
   "storage": {
-    "workspace": "$HOME/.openclaw/workspace/.openviking"
+    "workspace": "$ov_data_dir"
   },
   "embedding": {
     "dense": {
@@ -608,17 +587,11 @@ OVCONF
 
 # ---- DESC: Deploy scripts and tools ------------------------------------------
 function deploy_scripts() {
-    mkdir -p "$HOME/scripts"
-    cp -r "$REPO_DIR/scripts/"* "$HOME/scripts/" 2>/dev/null || true
-    chmod +x "$HOME/scripts/"*.sh 2>/dev/null || true
-
-    # Agent tools
-    mkdir -p "$HOME/.openclaw/tools"
-    cp "$REPO_DIR/scripts/repomap" "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
-    chmod +x "$HOME/.openclaw/tools/repomap" 2>/dev/null || true
-    # Symlink into ~/.local/bin so it's on PATH (same pattern as ov.py)
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$HOME/.openclaw/tools/repomap" "$HOME/.local/bin/repomap" 2>/dev/null || true
+    # Agent tools (local to project)
+    local tools_dir="$INSTALL_DIR/.openclaw/tools"
+    mkdir -p "$tools_dir"
+    cp "$REPO_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
+    chmod +x "$tools_dir/repomap" 2>/dev/null || true
 
     # Install aider-chat (repomap dependency)
     if python3 -c "import aider" 2>/dev/null; then
@@ -627,48 +600,24 @@ function deploy_scripts() {
         pretty_print "Installing aider-chat (required by repomap)…" "${fg_cyan}"
         $PIP_INSTALL aider-chat -q 2>&1 || pretty_print "aider-chat install failed" "${fg_yellow}"
     fi
-
-    # Plans
-    mkdir -p "$HOME/plans"
-    cp -r "$REPO_DIR/plans/"* "$HOME/plans/" 2>/dev/null || true
 }
 
-# ---- DESC: Clone agent repo into workspace -----------------------------------
-function clone_repo_into_workspace() {
-    local workspace_target="${OPENCLAW_DIR:-$HOME/.openclaw/workspace}"
-
-    echo ""
-    pretty_print "Agent Repository" "${ta_bold}"
-
-    if [[ -d "$workspace_target/metamorphosis-agent/.git" ]]; then
-        pretty_print "Repo already cloned"
-    else
-        pretty_print "Cloning agent repo into workspace…" "${fg_cyan}"
-        git clone --depth 1 https://github.com/salmonhealer772/metamorphosis-agent.git \
-            "$workspace_target/metamorphosis-agent" 2>&1 && \
-            pretty_print "Repo cloned" || \
-            pretty_print "Repo clone failed — agent can still function without it" "${fg_yellow}"
-    fi
-
-    # Verify clone
-    if [[ -d "$workspace_target/metamorphosis-agent/.git" ]]; then
-        pretty_print "Repo clone verified"
-    fi
-}
 
 # ---- DESC: Bootstrap OpenClaw configuration ----------------------------------
 function bootstrap_openclaw() {
     echo ""
     pretty_print "Configuring OpenClaw…" "${ta_bold}"
-    openclaw onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
-    openclaw onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
+    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
+    export OPENCLAW_DIR="$WORKSPACE_TARGET"
+    "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
+    "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
         pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
 }
 
 # ---- DESC: Main control flow --------------------------------------------------
 # ---- DESC: Initialize health state ----------------------------------------
 function init_health_state() {
-    local health_file="$HOME/.openclaw/health-state.json"
+    local health_file="$INSTALL_DIR/.openclaw/health-state.json"
     local ollama_status="down"
     local openviking_status="down"
     local model_status="down"
@@ -677,7 +626,7 @@ function init_health_state() {
     curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
     if [[ "$ollama_status" = "ok" ]]; then
         cd "$WORKSPACE_TARGET" 2>/dev/null
-        python3 ov.py status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
+        python3 "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
         ollama list 2>&1 | grep -q all-minilm && model_status="ok"
     fi
     disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
@@ -695,6 +644,23 @@ EOF
     pretty_print "Health state initialized"
 }
 
+
+# ---- DESC: Write run.sh wrapper ----------------------------------------------
+function write_run_script() {
+    cat > "$INSTALL_DIR/run.sh" << 'RUNEOF'
+#!/usr/bin/env bash
+# run.sh — Start metamorphosis-agent (portable)
+# Source env vars and launch OpenClaw from the local install.
+cd "$(dirname "$0")"
+export OPENCLAW_STATE_DIR="$(pwd)/.openclaw"
+export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
+export PATH="$(pwd)/.local/bin:$PATH"
+exec "$(pwd)/.local/bin/openclaw" "$@"
+RUNEOF
+    chmod +x "$INSTALL_DIR/run.sh"
+    pretty_print "Run script: ./run.sh"
+}
+
 function main() {
     trap script_trap_err ERR
     trap script_trap_exit EXIT
@@ -704,7 +670,8 @@ function main() {
     colour_init
 
     REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-    WORKSPACE_TARGET="${OPENCLAW_DIR:-$HOME/.openclaw/workspace}"
+    INSTALL_DIR="$REPO_DIR"
+    WORKSPACE_TARGET="$INSTALL_DIR/.openclaw/workspace"
 
     print_banner
     check_prerequisites
@@ -718,17 +685,14 @@ function main() {
     deploy_workspace
     setup_vector_memory
     deploy_scripts
-    clone_repo_into_workspace
     bootstrap_openclaw
     init_health_state
+    write_run_script
 
     echo ""
     pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"
     echo ""
-    pretty_print "Starting your agent…" "${fg_cyan}"
-    echo ""
-
-    openclaw
+    pretty_print "Start with: ./run.sh" "${fg_cyan}"
 }
 
 if ! (return 0 2> /dev/null); then

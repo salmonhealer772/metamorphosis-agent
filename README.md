@@ -36,26 +36,53 @@ DEEPSEEK_API_KEY=sk-abc123...
 ./setup.sh --env-file .env
 ```
 
+## Usage
+
+```bash
+cd metamorphosis-agent
+./run.sh
+```
+
+Everything stays inside the project directory — no system-wide installs, no
+`~/.profile` edits, no files scattered around `~/.openclaw/` or `~/scripts/`.
+Delete the folder and it's gone.
+
 ## What you get
 
 ```
-workspace/
-├── AGENTS.md        # Agent rules, behavioral guardrails, memory workflow
-├── SOUL.md          # Personality — direct, helpful, no filler
-├── IDENTITY.md      # Your agent's name, emoji, self-description
-├── USER.md          # Who you are — name, timezone, preferences
-├── TOOLS.md         # Local infra — OpenViking, RepoMap
-├── HEARTBEAT.md     # Periodic health checks, memory maintenance tasks
-├── MEMORY.md        # Curated long-term memory index (agent-maintained)
-├── ov.py            # OpenViking CLI — semantic vector memory (on PATH)
-├── memory/          # Daily session logs
-└── .openclaw/       # Config, approvals, knowledge, health state
+metamorphosis-agent/
+├── run.sh              # Start the agent (portable entry point)
+├── setup.sh            # Install everything here
+├── .local/bin/         # node, npm, openclaw (local binaries)
+├── .openclaw/          # OpenClaw config, workspace, tools, health state
+│   ├── workspace/      # Agent workspace (AGENTS.md, SOUL.md, ov.py, memory)
+│   ├── tools/          # repomap and other tools
+│   └── health-state.json
+├── .openviking/        # OpenViking config (ov.conf)
+├── scripts/            # Helper scripts
+└── diagnostics/
+```
+
+## Structure
+
+```
+workspace/                    (inside .openclaw/)
+├── AGENTS.md                 # Agent rules, behavioral guardrails, memory workflow
+├── SOUL.md                   # Personality — direct, helpful, no filler
+├── IDENTITY.md               # Your agent's name, emoji, self-description
+├── USER.md                   # Who you are — name, timezone, preferences
+├── TOOLS.md                  # Local infra — OpenViking, RepoMap
+├── HEARTBEAT.md              # Periodic health checks, memory maintenance tasks
+├── MEMORY.md                 # Curated long-term memory index (agent-maintained)
+├── ov.py                     # OpenViking CLI — semantic vector memory
+├── memory/                   # Daily session logs
+└── .openviking/              # Vector store data
 
 scripts/
-├── repomap              # Codebase understanding (tree-sitter + PageRank)
-├── setup-warp-oss.sh    # Warp OSS builder (remote)
-├── build-warp.sh        # Warp OSS builder (local)
-└── verify-openviking.sh # Memory health check
+├── repomap                   # Codebase understanding (tree-sitter + PageRank)
+├── setup-warp-oss.sh         # Warp OSS builder (remote)
+├── build-warp.sh             # Warp OSS builder (local)
+└── verify-openviking.sh      # Memory health check
 
 diagnostics/
 └── agent-diagnostic-prompt.md  # Full health check prompt
@@ -63,9 +90,9 @@ diagnostics/
 
 ## Health awareness — body feeling
 
-The agent maintains `~/.openclaw/health-state.json` — a structured file that
-tracks every subsystem. On startup it reads this file and proactively reports
-anything that's down:
+The agent maintains `health-state.json` inside `./.openclaw/` — a structured
+file that tracks every subsystem. On startup it reads this file and proactively
+reports anything that's down:
 
 > "Btw, Ollama isn't running — starting it now."
 > "Disk is getting full."
@@ -78,19 +105,17 @@ each. It reads health-state.json and reports actual service statuses — this is
 
 Vector database powered by **Ollama + all-minilm**. Install flow:
 
-1. Ollama installed without sudo, auto-starts on login via `~/.profile`
+1. Ollama installed without sudo
 2. Service confirmed running BEFORE model is pulled (fixes silent failure)
 3. `all-minilm` model pulled with automatic retry if first attempt fails
 4. `ov.py` config written, storage directory created
 5. `ov.py status` verifies semantic search is online
 
 ```bash
-ov.py find "what were we working on last week"
-ov.py store "decided to use Postgres for the new project"
-ov.py status
+./.openclaw/workspace/ov.py find "what were we working on last week"
+./.openclaw/workspace/ov.py store "decided to use Postgres for the new project"
+./.openclaw/workspace/ov.py status
 ```
-
-`ov.py` is on PATH (`~/.local/bin/ov.py`). No `cd` required.
 
 ## Behavioral guardrails
 
@@ -109,7 +134,7 @@ When code is mentioned, the agent auto-generates a structural map using
 tree-sitter AST parsing and PageRank ranking. Supports Python, TypeScript,
 JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more.
 
-`repomap` is on PATH (`~/.local/bin/repomap`). Dependency `aider-chat` is
+`repomap` is at `.openclaw/tools/repomap`. Dependency `aider-chat` is
 installed during setup.
 
 ## Setup script

@@ -10,7 +10,7 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ## OpenViking (Vector Memory)
 
-- **Config:** `~/.openviking/ov.conf`
+- **Config:** `.openviking/ov.conf` (local to install dir)
 - **Server:** Ollama (http://127.0.0.1:11434) — auto-starts on login via `~/.profile`
 - **Model:** all-minilm (for embeddings)
 - **CLI:** `ov.py` (on PATH — symlinked to `~/.local/bin/ov.py`)
@@ -20,6 +20,6 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ## RepoMap (Codebase Understanding)
 
-- **Location:** `~/.openclaw/tools/repomap`
+- **Location:** `.openclaw/tools/repomap` (local to install dir)
 - **Usage:** `repomap <directory> [map_tokens]`
 - **Parses:** Python, TypeScript, JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more

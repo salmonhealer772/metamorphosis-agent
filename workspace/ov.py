@@ -18,7 +18,7 @@ import os, sys, json, tempfile, asyncio, signal
 from pathlib import Path
 from functools import wraps
 
-WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
+WORKSPACE = os.environ.get("OPENCLAW_DIR", os.path.expanduser("~/.openclaw/workspace"))
 OV_DATA = os.path.join(WORKSPACE, ".openviking")
 
 _client = None

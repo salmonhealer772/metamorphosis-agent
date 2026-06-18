@@ -2,7 +2,7 @@
 
 ## 1. Health Monitor
 
-Check every system and write results to `~/.openclaw/health-state.json`.
+Check every system and write results to `./.openclaw/health-state.json`.
 
 Schema for the file:
 ```json
@@ -17,17 +17,17 @@ Schema for the file:
 
 Commands to check each:
 - **ollama:** `curl -sf http://127.0.0.1:11434/api/version`
-- **openviking:** `cd ~/.openclaw/workspace && bash verify-openviking.sh` (runs all 12 checks, exits 0/1)
+- **openviking:** `cd ./.openclaw/workspace && bash verify-openviking.sh` (runs all 12 checks, exits 0/1)
 - **all_minilm:** `ollama list 2>&1 | grep -q all-minilm`
 - **disk:** `df -h ~ | awk 'NR==2 {print $5}' | sed 's/%//'` — warn if > 90%
 
 ## 2. Memory Maintenance (weekly, not every heartbeat)
 
-Scan `~/.openclaw/workspace/memory/` for daily logs older than 30 days.
+Scan `./.openclaw/workspace/memory/` for daily logs older than 30 days.
 If any are found, the agent should evaluate whether to summarize them.
 Never delete without consciously choosing to. See AGENTS.md forgetting rules.
 
 ## 3. Startup
 
-On session startup, read `~/.openclaw/health-state.json`.
+On session startup, read `./.openclaw/health-state.json`.
 If any service is marked "down", mention it in your first message.

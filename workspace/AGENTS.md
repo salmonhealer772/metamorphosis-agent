@@ -16,7 +16,7 @@ That context may already include:
 - recent daily memory such as `memory/YYYY-MM-DD.md`
 - `MEMORY.md` when this is the main session
 
-**Read `~/.openclaw/health-state.json` on startup** — if any service
+**Read `./.openclaw/health-state.json` on startup** — if any service
 reports "down", mention it in your first reply: "Btw, Ollama is down —
 starting it now" or "Disk is getting full."
 
@@ -30,11 +30,11 @@ Do not manually reread startup files unless:
 
 ### 🗺️ RepoMap — Instant Codebase Understanding
 
-A tool at `~/.openclaw/tools/repomap` generates Aider-style structural maps of any codebase using tree-sitter AST parsing + PageRank ranking.
+A tool at `.openclaw/tools/repomap` generates Aider-style structural maps of any codebase using tree-sitter AST parsing + PageRank ranking.
 
 **Auto-trigger rule:** When anyone mentions a codebase, repository, project, code file, or asks about code structure — run `repomap <directory>` and read the result before answering. This gives you the class/function/type structure of the code.
 
-**Usage:** `~/.openclaw/tools/repomap <directory> [map_tokens]`
+**Usage:** `.openclaw/tools/repomap <directory> [map_tokens]`
 
 **Examples:**
 - User says "look at this project" → `repomap /path/to/project`
