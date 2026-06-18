@@ -1,8 +1,11 @@
 #!/bin/bash
-# OpenViking Verification Script
+# OpenViking Verification Script — tests the REAL workspace, not a sandbox
 # Run: bash verify-openviking.sh
+
 PASS=0
 FAIL=0
+OV_DIR="/home/fade/.openclaw/workspace/.openviking"
+OV_PY="/home/fade/.openclaw/workspace/ov.py"
 
 check() {
     local desc="$1"
@@ -16,46 +19,39 @@ check() {
     fi
 }
 
-echo "=== OpenViking Verification ==="
+echo "=== OpenViking Verification (Real Workspace) ==="
 echo ""
 
-echo "[1] Ollama Server"
+# ── Layer 1: Infrastructure ──
+echo "[1] Infrastructure"
 check "ollama process running" "ps aux | grep -q '[o]llama serve'"
-check "ollama API responds" "curl -sf http://127.0.0.1:11434/api/tags > /dev/null"
+check "ollama API responds"     "curl -sf http://127.0.0.1:11434/api/tags > /dev/null"
 check "all-minilm model loaded" "curl -sf http://127.0.0.1:11434/api/tags | grep -q all-minilm"
+check "embedding API works"     "curl -sf http://127.0.0.1:11434/v1/embeddings -d '{\"model\":\"all-minilm\",\"input\":[\"hello\"]}' | grep -q 'embedding'"
 
-echo -e "\n[2] Embedding API"
-check "v1/embeddings endpoint works" "curl -sf http://127.0.0.1:11434/v1/embeddings -d '{\"model\":\"all-minilm\",\"input\":[\"hello\"]}' | grep -q 'embedding'"
+# ── Layer 2: Real Workspace files ──
+echo -e "\n[2] Workspace Integrity"
+check "openviking config exists" "test -f ~/.openviking/ov.conf"
+check "real workspace dir exists" "test -d '$OV_DIR'"
+check "ov.py script exists" "test -f '$OV_PY'"
+check "openviking pip package" "python3 -c 'import openviking; v=openviking.__version__; assert len(v) > 0'"
 
-echo -e "\n[3] OpenViking Config"
-check "config file exists" "test -f ~/.openviking/ov.conf"
-check "workspace dir exists" "test -d $HOME/.openclaw/workspace/.openviking"
-check "openviking pip package" "python3 -c 'import openviking; print(openviking.__version__)' > /dev/null"
+# ── Layer 3: ov.py CLI checks ──
+echo -e "\n[3] CLI Sanity"
+check "ov.py status works"      "cd /home/fade/.openclaw/workspace && python3 '$OV_PY' status 2>&1 | grep -q 'Semantic search: OK'"
+check "ov.py ls returns items"  "cd /home/fade/.openclaw/workspace && python3 '$OV_PY' ls 2>&1 | grep -qE '📁|📄'"
+check "ov.py find returns hits" "cd /home/fade/.openclaw/workspace && python3 '$OV_PY' find 'openviking memory' 2>&1 | grep -q 'Found'"
 
-echo -e "\n[4] Knowledge Storage (E2E)"
-E2E_JSON=$(python3 2>/dev/null << 'PYEOF'
-import openviking as ov, tempfile, os, json
-
-tf = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, dir='/tmp')
-tf.write("# Verification Doc\nThe answer to the verification question is 42.")
-tf.close()
-
-client = ov.SyncOpenViking(path="/tmp/ov_verify")
-client.initialize()
-client.add_resource(path=tf.name)
-client.wait_processed(timeout=30)
-
-results = client.find("verification question answer", limit=3)
-found = any("42" in client.read(r.uri) for r in results.resources)
-client.close()
-os.unlink(tf.name)
-import shutil; shutil.rmtree("/tmp/ov_verify", ignore_errors=True)
-print(json.dumps({"found": found, "count": len(results.resources)}))
-PYEOF
-)
-
-check "store and retrieve knowledge" "echo '$E2E_JSON' | grep -q '\"found\": true'"
-check "semantic search returns results" "echo '$E2E_JSON' | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d[\"count\"] > 0'"
+# ── Layer 4: E2E Store → Find → Delete on real workspace ──
+echo -e "\n[4] End-to-End (Real Workspace)"
+MARKER="OV_VERIFY_$(date +%s)"
+if OV_VERIFY_MARKER="$MARKER" python3 /home/fade/.openclaw/workspace/verify-e2e.py 2>/dev/null; then
+    echo "  ✅ store+find+delete cycle"
+    ((PASS++))
+else
+    echo "  ❌ store+find+delete cycle"
+    ((FAIL++))
+fi
 
 echo -e "\n=== Results ==="
 echo "  Passed: $PASS"
@@ -63,5 +59,6 @@ echo "  Failed: $FAIL"
 if [ "$FAIL" -eq 0 ]; then
     echo -e "\n🎉 All systems operational!"
 else
-    echo -e "\n⚠️  Some checks failed"
+    echo -e "\n⚠️  $FAIL check(s) failed"
+    exit 1
 fi
