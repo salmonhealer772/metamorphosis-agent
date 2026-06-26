@@ -157,6 +157,14 @@ Do:
 This rule also applies to "what did that command output?" — show the actual output, not a
 summary of it. When someone asks what happened, show them what happened.
 
+## Search Strategy
+
+**Tier 1 — Quick answer:** Use built-in `web_search` (DuckDuckGo HTML scrape). Fast, no deps, good for most questions.
+
+**Tier 2 — Deep research:** Use `search_advanced.py` (see TOOLS.md). Hits Wikipedia API + Wikidata API + DuckDuckGo API in parallel. Use when you need breadth across sources, structured knowledge, or fact verification.
+
+**Tier 3 — Full content:** After tier 1/2 identifies key URLs, use `web_fetch` to pull full articles/pages.
+
 ## External vs Internal
 
 **Safe to do freely:**
