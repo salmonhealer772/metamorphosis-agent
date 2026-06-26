@@ -124,45 +124,73 @@ def _wikidata_request(url, retries=3):
 
 
 def search_wikidata(query, count=5):
-    """Search Wikidata for structured knowledge"""
+    """Search Wikidata for structured knowledge.
+
+    Wikidata's wbsearchentities API matches entity labels/aliases, not
+    free text. Multi-word descriptive queries ("Eiffel Tower height")
+    often return nothing because no entity is labelled that way.
+
+    If the full query returns zero results, this progressively shortens
+    it by removing trailing words until it finds a match or runs out of
+    words to try.
+    """
     base_url = "https://www.wikidata.org/w/api.php"
-    params = {
-        'action': 'wbsearchentities',
-        'search': query,
-        'language': 'en',
-        'format': 'json',
-        'limit': count
-    }
     
-    url = f"{base_url}?{urllib.parse.urlencode(params)}"
-    
-    try:
+    def _try_query(search_text):
+        params = {
+            'action': 'wbsearchentities',
+            'search': search_text,
+            'language': 'en',
+            'format': 'json',
+            'limit': count
+        }
+        url = f"{base_url}?{urllib.parse.urlencode(params)}"
         data = _wikidata_request(url)
         if data is None:
-            return [{'error': 'Wikidata search failed after retries'}]
-        
+            return None
+        return data.get('search', [])
+    
+    def _parse_results(entities):
         results = []
-        for entity in data.get('search', []):
+        for entity in entities:
             raw_url = entity.get('url', '')
             if raw_url.startswith('//'):
                 raw_url = 'https:' + raw_url
-            result = {
+            results.append({
                 'title': entity.get('label', 'N/A'),
                 'summary': entity.get('description', 'No description available'),
                 'url': raw_url,
                 'source': 'Wikidata',
                 'type': 'entity',
                 'wikidata_id': entity.get('title', '')
-            }
-            results.append(result)
-        
+            })
         return results
+    
+    try:
+        # Try full query first
+        entities = _try_query(query)
+        if entities:
+            return _parse_results(entities)
+        
+        # Zero results — progressively shorten multi-word queries
+        words = query.split()
+        if len(words) > 1:
+            for word_count in range(len(words) - 1, 0, -1):
+                shorter = ' '.join(words[:word_count])
+                entities = _try_query(shorter)
+                if entities:
+                    return _parse_results(entities)
+        
+        return []
             
     except Exception as e:
         return [{'error': f'Wikidata search failed: {str(e)}'}]
 
 def search_duckduckgo(query, count=5):
     """Search using DuckDuckGo Instant Answers API.
+
+    Source name: 'ddg-abstracts' (was 'duckduckgo' — old name still works
+    with a deprecation warning for backwards compatibility).
 
     NOTE: This hits api.duckduckgo.com which returns instant answers,
     abstracts, and related topics — NOT a full web search result page.
@@ -222,20 +250,23 @@ def search_duckduckgo(query, count=5):
     except Exception as e:
         return [{'error': f'DuckDuckGo Instant Answers search failed: {str(e)}'}]
 
-def combined_search(query, count=5, sources=['wikipedia', 'wikidata', 'duckduckgo']):
+def combined_search(query, count=5, sources=None):
     """
     Combined search across multiple sources.
 
     Args:
         query: Search query string
         count: Number of results per source
-        sources: List of sources ('wikipedia', 'wikidata', 'duckduckgo')
-                 duckduckgo = DuckDuckGo Instant Answers API (abstracts
-                 and related topics, not full web search).
+        sources: List of sources ('wikipedia', 'wikidata', 'ddg-abstracts')
+                 'ddg-abstracts' = DuckDuckGo Instant Answers API
+                 (aliased from legacy name 'duckduckgo' for backwards compat)
 
     Returns:
         Dictionary with results from each source
     """
+    if sources is None:
+        sources = ['wikipedia', 'wikidata', 'ddg-abstracts']
+    
     all_results = {
         'query': query,
         'timestamp': datetime.now().isoformat(),
@@ -249,8 +280,9 @@ def combined_search(query, count=5, sources=['wikipedia', 'wikidata', 'duckduckg
     if 'wikidata' in sources:
         all_results['sources']['wikidata'] = search_wikidata(query, count)
     
-    if 'duckduckgo' in sources:
-        all_results['sources']['duckduckgo'] = search_duckduckgo(query, count)
+    # Accept both new name 'ddg-abstracts' and legacy name 'duckduckgo'
+    if 'ddg-abstracts' in sources or 'duckduckgo' in sources:
+        all_results['sources']['ddg-abstracts'] = search_duckduckgo(query, count)
     
     # Create summary of top results
     for source_name, results in all_results['sources'].items():
@@ -271,8 +303,8 @@ def main():
         print("Usage: python3 search_advanced.py <query> [count] [sources]")
         print("  query: Search query string")
         print("  count: Number of results per source (default: 5)")
-        print("  sources: Comma-separated list: wikipedia, wikidata, duckduckgo (default: all)")
-        print("  Note: duckduckgo source uses DuckDuckGo Instant Answers API")
+        print("  sources: Comma-separated list: wikipedia, wikidata, ddg-abstracts (default: all)")
+        print("  Note: 'ddg-abstracts' uses DuckDuckGo Instant Answers API (abstracts, not web search)")
         sys.exit(1)
     
     query = sys.argv[1].strip()
@@ -293,8 +325,13 @@ def main():
         print(f"Warning: maximum count is 50, capping at 50")
         count = 50
     
-    sources_str = sys.argv[3] if len(sys.argv) > 3 else 'wikipedia,wikidata,duckduckgo'
+    sources_str = sys.argv[3] if len(sys.argv) > 3 else 'wikipedia,wikidata,ddg-abstracts'
     sources = [s.strip() for s in sources_str.split(',')]
+    
+    # Deprecation warning for legacy 'duckduckgo' source name
+    if 'duckduckgo' in sources:
+        print("[DEPRECATED] Source 'duckduckgo' renamed to 'ddg-abstracts' to clarify")
+        print("           it's DuckDuckGo Instant Answers (abstracts), not web search.")
     
     print(f"\n{'='*80}")
     print(f"Advanced Search Results for: '{query}'")

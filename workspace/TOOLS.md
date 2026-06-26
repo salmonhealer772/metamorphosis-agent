@@ -24,9 +24,10 @@ Things like:
 **What each source provides:**
 - `wikipedia` — Full-text search of Wikipedia articles. Encyclopedic depth.
 - `wikidata` — Entity search (structured data: IDs, labels, descriptions, relationships).
-- `duckduckgo` — DuckDuckGo Instant Answers API. Returns an abstract, related
+- `ddg-abstracts` — DuckDuckGo Instant Answers API. Returns an abstract, related
   topics, and category info. **Not full web search** — poor recall for news,
   time-sensitive, or niche queries.
+  (Legacy name `duckduckgo` still works with deprecation warning.)
 
 **For full web results**, use the built-in `web_search` tool (DuckDuckGo HTML scrape).
 
@@ -36,7 +37,7 @@ python3 search_advanced.py "<query>" [count] [sources]
 ```
 
 - `count`: results per source (default: 5)
-- `sources`: comma-separated — `wikipedia`, `wikidata`, `duckduckgo` (default: all three)
+- `sources`: comma-separated — `wikipedia`, `wikidata`, `ddg-abstracts` (default: all three)
 
 **Examples:**
 ```bash
@@ -47,7 +48,7 @@ python3 search_advanced.py "2026 FIFA World Cup"
 python3 search_advanced.py "machine learning" 3 wikipedia,wikidata
 
 # Just DuckDuckGo Instant Answers (abstracts, not web results)
-python3 search_advanced.py "theory of relativity" 5 duckduckgo
+python3 search_advanced.py "theory of relativity" 5 ddg-abstracts
 ```
 
 **When to use it:**
