@@ -79,7 +79,7 @@ def search_wikipedia(query, count=5):
                 result = {
                     'title': page.get('title', 'N/A'),
                     'summary': clean_snippet + '...',
-                    'url': 'https://en.wikipedia.org/wiki/' + urllib.parse.quote(page.get('title', ''), safe=''),
+                    'url': 'https://en.wikipedia.org/wiki/' + urllib.parse.quote(page.get('title', '').replace(' ', '_'), safe=''),
                     'source': 'Wikipedia',
                     'type': 'article'
                 }
@@ -246,10 +246,25 @@ def main():
         print("  count: Number of results per source (default: 5)")
         print("  sources: Comma-separated list: wikipedia, wikidata, duckduckgo (default: all)")
         print("  Note: duckduckgo source uses DuckDuckGo Instant Answers API")
-        return
+        sys.exit(1)
     
-    query = sys.argv[1]
-    count = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    query = sys.argv[1].strip()
+    if not query:
+        print("Error: query cannot be empty")
+        sys.exit(1)
+    
+    try:
+        count = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    except ValueError:
+        print(f"Error: count must be a number, got '{sys.argv[2]}'")
+        sys.exit(1)
+    
+    if count < 1:
+        print(f"Warning: count must be at least 1, using 1 instead")
+        count = 1
+    if count > 50:
+        print(f"Warning: maximum count is 50, capping at 50")
+        count = 50
     
     sources_str = sys.argv[3] if len(sys.argv) > 3 else 'wikipedia,wikidata,duckduckgo'
     sources = [s.strip() for s in sources_str.split(',')]
