@@ -645,6 +645,32 @@ function bootstrap_openclaw() {
     if [[ -d "$HOME/.openclaw" ]]; then
         mv "$HOME/.openclaw" "$INSTALL_DIR/.leaks/.openclaw-onboard" 2>/dev/null || rm -rf "$HOME/.openclaw" 2>/dev/null || true
     fi
+
+    # Fix workspace path in config: onboard may have written a path based on
+    # the overridden HOME (.tmp-oc-home), which is now deleted. Point it to
+    # the actual deployed workspace at .openclaw/workspace/.
+    OPENCLAW_CONFIG_JSON="$INSTALL_DIR/.openclaw/openclaw.json" \
+    CORRECT_WORKSPACE="$WORKSPACE_TARGET" \
+    python3 << 'PYEOF' || pretty_print "Workspace path fix skipped" "${fg_yellow}"
+import json, os
+
+config_path = os.environ['OPENCLAW_CONFIG_JSON']
+correct_path = os.environ['CORRECT_WORKSPACE']
+
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+agents = config.setdefault('agents', {})
+defaults = agents.setdefault('defaults', {})
+old_path = defaults.get('workspace')
+defaults['workspace'] = correct_path
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+if old_path and old_path != correct_path:
+    print(f'Fixed: agents.defaults.workspace changed from "{old_path}" to "{correct_path}"')
+PYEOF
 }
 
 # ---- DESC: Main control flow --------------------------------------------------
