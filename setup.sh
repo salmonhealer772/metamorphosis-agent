@@ -651,7 +651,7 @@ function bootstrap_openclaw() {
     # the actual deployed workspace at .openclaw/workspace/.
     OPENCLAW_CONFIG_JSON="$INSTALL_DIR/.openclaw/openclaw.json" \
     CORRECT_WORKSPACE="$WORKSPACE_TARGET" \
-    python3 << 'PYEOF' || pretty_print "Workspace path fix skipped" "${fg_yellow}"
+    python3 << 'PYEOF' || pretty_print "Config fix skipped" "${fg_yellow}"
 import json, os
 
 config_path = os.environ['OPENCLAW_CONFIG_JSON']
@@ -660,16 +660,27 @@ correct_path = os.environ['CORRECT_WORKSPACE']
 with open(config_path, 'r') as f:
     config = json.load(f)
 
+# 1. Fix workspace path (onboard writes stale .tmp-oc-home path)
 agents = config.setdefault('agents', {})
 defaults = agents.setdefault('defaults', {})
 old_path = defaults.get('workspace')
+changed = False
+if old_path and old_path != correct_path:
+    changed = True
 defaults['workspace'] = correct_path
+
+# 2. Pin web search provider to DuckDuckGo (no API key needed, works out of box)
+#    Avoids broken providers like kimi that get enabled during onboard
+search_cfg = config.setdefault('tools', {}).setdefault('web', {}).setdefault('search', {})
+if not search_cfg.get('provider'):
+    search_cfg['provider'] = 'duckduckgo'
+    changed = True
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
 
-if old_path and old_path != correct_path:
-    print(f'Fixed: agents.defaults.workspace changed from "{old_path}" to "{correct_path}"')
+if changed:
+    print(f'Config updated: workspace={correct_path}, search_provider=duckduckgo')
 PYEOF
 }
 

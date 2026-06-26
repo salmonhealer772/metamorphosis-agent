@@ -13,9 +13,12 @@ Sources:
 
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 import ssl
 import re
+import time
+import random
 from datetime import datetime
 from html.parser import HTMLParser
 
@@ -90,6 +93,36 @@ def search_wikipedia(query, count=5):
     except Exception as e:
         return [{'error': f'Wikipedia search failed: {str(e)}'}]
 
+def _wikidata_request(url, retries=3):
+    """Make a Wikidata API request with exponential backoff retry.
+    
+    Wikidata rate-limits at ~100 req/min. If we hit 429, back off
+    with jittered delays to avoid hammering the API.
+    """
+    ssl_context = ssl.create_default_context()
+    
+    for attempt in range(retries):
+        try:
+            request = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (OpenClaw Search Tool)'}
+            )
+            with urllib.request.urlopen(request, context=ssl_context, timeout=15) as response:
+                return json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < retries - 1:
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                time.sleep(wait)
+                continue
+            raise
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(1)
+                continue
+            raise
+    return None
+
+
 def search_wikidata(query, count=5):
     """Search Wikidata for structured knowledge"""
     base_url = "https://www.wikidata.org/w/api.php"
@@ -104,32 +137,26 @@ def search_wikidata(query, count=5):
     url = f"{base_url}?{urllib.parse.urlencode(params)}"
     
     try:
-        ssl_context = ssl.create_default_context()
-        request = urllib.request.Request(
-            url,
-            headers={'User-Agent': 'Mozilla/5.0 (OpenClaw Search Tool)'}
-        )
+        data = _wikidata_request(url)
+        if data is None:
+            return [{'error': 'Wikidata search failed after retries'}]
         
-        with urllib.request.urlopen(request, context=ssl_context, timeout=15) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            
-            results = []
-            for entity in data.get('search', []):
-                raw_url = entity.get('url', '')
-                # Wikidata returns protocol-relative URLs (//...). Add https: prefix.
-                if raw_url.startswith('//'):
-                    raw_url = 'https:' + raw_url
-                result = {
-                    'title': entity.get('label', 'N/A'),
-                    'summary': entity.get('description', 'No description available'),
-                    'url': raw_url,
-                    'source': 'Wikidata',
-                    'type': 'entity',
-                    'wikidata_id': entity.get('title', '')
-                }
-                results.append(result)
-            
-            return results
+        results = []
+        for entity in data.get('search', []):
+            raw_url = entity.get('url', '')
+            if raw_url.startswith('//'):
+                raw_url = 'https:' + raw_url
+            result = {
+                'title': entity.get('label', 'N/A'),
+                'summary': entity.get('description', 'No description available'),
+                'url': raw_url,
+                'source': 'Wikidata',
+                'type': 'entity',
+                'wikidata_id': entity.get('title', '')
+            }
+            results.append(result)
+        
+        return results
             
     except Exception as e:
         return [{'error': f'Wikidata search failed: {str(e)}'}]
