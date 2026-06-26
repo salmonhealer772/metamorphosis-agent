@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-Advanced Web Search Tool - Enhanced version with multiple API sources
-Combines Wikipedia, Wikidata, and web scraping for comprehensive results
+Multi-source search tool combining Wikipedia, Wikidata, and DuckDuckGo.
+
+Sources:
+  wikipedia  — Wikipedia full-text search. Best for encyclopedic articles.
+  wikidata   — Wikidata entity search. Best for structured data, identifiers,
+               and relationships between entities.
+  duckduckgo — DuckDuckGo Instant Answers API. Returns abstracts and
+               related topics, NOT full web results. Use the built-in
+               web_search tool for comprehensive web page results.
 """
 
 import urllib.request
@@ -118,8 +125,15 @@ def search_wikidata(query, count=5):
     except Exception as e:
         return [{'error': f'Wikidata search failed: {str(e)}'}]
 
-def search_bing(query, count=5):
-    """Search using DuckDuckGo JSON API (replaces Bing for reliable JSON responses)"""
+def search_duckduckgo(query, count=5):
+    """Search using DuckDuckGo Instant Answers API.
+
+    NOTE: This hits api.duckduckgo.com which returns instant answers,
+    abstracts, and related topics — NOT a full web search result page.
+    Good for encyclopedic lookups and topic summaries, but has poor
+    recall for news, time-sensitive, or niche queries.
+    For full web search, use the built-in web_search tool (HTML scrape).
+    """
     base_url = "https://api.duckduckgo.com"
     params = {
         'q': query,
@@ -151,36 +165,38 @@ def search_bing(query, count=5):
                     'title': data.get('Heading', query),
                     'summary': abstract[:300],
                     'url': data.get('Text', ''),
-                    'source': 'DuckDuckGo',
+                    'source': 'DuckDuckGo Instant Answers',
                     'type': 'overview'
                 })
             
-            # Get related topics (web results)
+            # Get related topics
             topics = data.get('RelatedTopics', [])
             for item in topics[:count]:
                 result = {
                     'title': item.get('Title', 'N/A'),
                     'summary': item.get('Text', 'No description')[:200],
                     'url': item.get('FirstURL', item.get('URL', '')),
-                    'source': 'DuckDuckGo',
-                    'type': item.get('Type', 'webpage')
+                    'source': 'DuckDuckGo Instant Answers',
+                    'type': item.get('Type', 'related')
                 }
                 results.append(result)
             
-            return results[:count + 1]  # +1 for the abstract if present
+            return results[:count + 1]
             
     except Exception as e:
-        return [{'error': f'DuckDuckGo search failed: {str(e)}'}]
+        return [{'error': f'DuckDuckGo Instant Answers search failed: {str(e)}'}]
 
 def combined_search(query, count=5, sources=['wikipedia', 'wikidata', 'duckduckgo']):
     """
-    Combined search across multiple sources
-    
+    Combined search across multiple sources.
+
     Args:
         query: Search query string
         count: Number of results per source
-        sources: List of sources to search ('wikipedia', 'wikidata', 'duckduckgo')
-    
+        sources: List of sources ('wikipedia', 'wikidata', 'duckduckgo')
+                 duckduckgo = DuckDuckGo Instant Answers API (abstracts
+                 and related topics, not full web search).
+
     Returns:
         Dictionary with results from each source
     """
@@ -198,7 +214,7 @@ def combined_search(query, count=5, sources=['wikipedia', 'wikidata', 'duckduckg
         all_results['sources']['wikidata'] = search_wikidata(query, count)
     
     if 'duckduckgo' in sources:
-        all_results['sources']['duckduckgo'] = search_bing(query, count)
+        all_results['sources']['duckduckgo'] = search_duckduckgo(query, count)
     
     # Create summary of top results
     for source_name, results in all_results['sources'].items():
@@ -220,6 +236,7 @@ def main():
         print("  query: Search query string")
         print("  count: Number of results per source (default: 5)")
         print("  sources: Comma-separated list: wikipedia, wikidata, duckduckgo (default: all)")
+        print("  Note: duckduckgo source uses DuckDuckGo Instant Answers API")
         return
     
     query = sys.argv[1]

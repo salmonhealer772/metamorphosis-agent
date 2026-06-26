@@ -19,7 +19,16 @@ Things like:
 
 **Location:** `search_advanced.py` (workspace root)
 
-**Sources:** Wikipedia API, Wikidata API, DuckDuckGo API
+**Sources:** Wikipedia API, Wikidata API, DuckDuckGo Instant Answers API
+
+**What each source provides:**
+- `wikipedia` — Full-text search of Wikipedia articles. Encyclopedic depth.
+- `wikidata` — Entity search (structured data: IDs, labels, descriptions, relationships).
+- `duckduckgo` — DuckDuckGo Instant Answers API. Returns an abstract, related
+  topics, and category info. **Not full web search** — poor recall for news,
+  time-sensitive, or niche queries.
+
+**For full web results**, use the built-in `web_search` tool (DuckDuckGo HTML scrape).
 
 **Usage:**
 ```bash
@@ -34,11 +43,11 @@ python3 search_advanced.py "<query>" [count] [sources]
 # All sources, default 5 each
 python3 search_advanced.py "2026 FIFA World Cup"
 
-# Specific sources
+# Specific sources — Wikipedia + Wikidata for research depth
 python3 search_advanced.py "machine learning" 3 wikipedia,wikidata
 
-# Just web results
-python3 search_advanced.py "latest technology news" 5 duckduckgo
+# Just DuckDuckGo Instant Answers (abstracts, not web results)
+python3 search_advanced.py "theory of relativity" 5 duckduckgo
 ```
 
 **When to use it:**
@@ -47,7 +56,11 @@ python3 search_advanced.py "latest technology news" 5 duckduckgo
 - **Structured knowledge** from Wikidata (entities, IDs, descriptions)
 - Pair with `web_fetch` to pull full articles from top results
 
-**For quick web lookups**, the built-in `web_search` tool (DuckDuckGo HTML scrape) is faster and lighter. Use `search_advanced.py` when you want breadth + depth.
+**Tier system:**
+- **Tier 1** — `web_search` (fast, live web results, good for news/current events)
+- **Tier 2** — `search_advanced.py` (Wikipedia + Wikidata depth, DDG abstracts)
+- **Tier 3** — `web_fetch` (full article content from specific URLs)
+Use `search_advanced.py` when you need research depth, not just a quick link.
 
 ---
 
