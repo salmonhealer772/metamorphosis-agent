@@ -71,10 +71,15 @@ def search_wikipedia(query, count=5):
             
             results = []
             for page in data.get('query', {}).get('search', []):
+                # Strip HTML tags from Wikipedia snippet
+                raw_snippet = page.get('snippet', 'No description')
+                clean_snippet = re.sub(r'<[^>]+>', '', raw_snippet)
+                clean_snippet = clean_snippet.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+                clean_snippet = clean_snippet.replace('&quot;', '"').replace('&#39;', "'")
                 result = {
                     'title': page.get('title', 'N/A'),
-                    'summary': page.get('snippet', 'No description') + '...',
-                    'url': f"https://en.wikipedia.org/wiki/{page.get('title', '')}",
+                    'summary': clean_snippet + '...',
+                    'url': 'https://en.wikipedia.org/wiki/' + urllib.parse.quote(page.get('title', ''), safe=''),
                     'source': 'Wikipedia',
                     'type': 'article'
                 }
@@ -110,10 +115,14 @@ def search_wikidata(query, count=5):
             
             results = []
             for entity in data.get('search', []):
+                raw_url = entity.get('url', '')
+                # Wikidata returns protocol-relative URLs (//...). Add https: prefix.
+                if raw_url.startswith('//'):
+                    raw_url = 'https:' + raw_url
                 result = {
                     'title': entity.get('label', 'N/A'),
                     'summary': entity.get('description', 'No description available'),
-                    'url': entity.get('url', ''),
+                    'url': raw_url,
                     'source': 'Wikidata',
                     'type': 'entity',
                     'wikidata_id': entity.get('title', '')
