@@ -617,6 +617,11 @@ function deploy_scripts() {
     cp "$REPO_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
     chmod +x "$tools_dir/repomap" 2>/dev/null || true
 
+    # Deploy verify scripts to workspace (Bug #4 fix)
+    cp "$REPO_DIR/scripts/verify-openviking.sh" "$WORKSPACE_TARGET/" 2>/dev/null || true
+    cp "$REPO_DIR/scripts/verify-e2e.py" "$WORKSPACE_TARGET/" 2>/dev/null || true
+    chmod +x "$WORKSPACE_TARGET/verify-openviking.sh" 2>/dev/null || true
+
     # Install aider-chat (repomap dependency)
     if python3 -c "import aider" 2>/dev/null; then
         pretty_print "aider-chat already installed"
@@ -726,6 +731,9 @@ export OPENCLAW_STATE_DIR="$(pwd)/.openclaw"
 export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
 export npm_config_cache="$(pwd)/.npm-cache"
+# OpenViking: make py-libs importable + point config file to project-local copy
+export PYTHONPATH="$(pwd)/.openclaw/py-libs:${PYTHONPATH:-}"
+export OPENVIKING_CONFIG_FILE="$(pwd)/.openviking/ov.conf"
 exec "$(pwd)/.local/bin/openclaw" "$@"
 RUNEOF
     chmod +x "$INSTALL_DIR/run.sh"
@@ -745,6 +753,39 @@ function cleanup_portable() {
     done
 
     pretty_print "Portable setup complete — no files left in ~/"
+}
+
+# ---- DESC: Create HOME symlinks for library compat (post-cleanup) -------------
+function setup_home_symlinks() {
+    local config_src="$INSTALL_DIR/.openviking/ov.conf"
+    local ov_home_dir="$HOME/.openviking"
+    local ov_home_config="$ov_home_dir/ov.conf"
+
+    # Create HOME symlink for OpenViking config (library looks here by default)
+    if [[ -f "$config_src" ]]; then
+        mkdir -p "$ov_home_dir"
+        if [[ ! -e "$ov_home_config" ]]; then
+            ln -s "$config_src" "$ov_home_config"
+            pretty_print "OpenViking config linked: $ov_home_config -> $config_src"
+        fi
+    fi
+
+    # Index memory if empty (Bug #5 fix)
+    local ov_data="$WORKSPACE_TARGET/.openviking"
+    local ov_python="python3"
+    local ov_venv="$INSTALL_DIR/.openclaw/venv"
+    if [[ -f "$ov_venv/bin/python3" ]] && "$ov_venv/bin/python3" -c "import openviking" 2>/dev/null; then
+        ov_python="$ov_venv/bin/python3"
+        pretty_print "Using venv python for OpenViking" "${fg_cyan}"
+    fi
+    if [[ -d "$ov_data" && -z "$(ls -A "$ov_data" 2>/dev/null)" ]]; then
+        if "$ov_python" -c "import openviking" 2>/dev/null; then
+            pretty_print "Indexing initial workspace memory…" "${fg_cyan}"
+            cd "$WORKSPACE_TARGET" 2>/dev/null && "$ov_python" ov.py index 2>&1 || true
+            cd "$orig_cwd"
+            pretty_print "Initial memory index complete"
+        fi
+    fi
 }
 
 function main() {
@@ -777,6 +818,10 @@ function main() {
     init_health_state
     write_run_script
     cleanup_portable
+    setup_home_symlinks
+
+    # Mark setup as complete
+    touch "$INSTALL_DIR/.setup-complete"
 
     echo ""
     pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"

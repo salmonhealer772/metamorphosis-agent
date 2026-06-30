@@ -12,14 +12,35 @@ Usage:
     python3 ov.py status
 """
 
-import openviking as ov
-import openviking.async_client as ov_ac
-import os, sys, json, tempfile, asyncio, signal
+import os, sys, json, tempfile, asyncio, signal, re
+
+try:
+    import openviking as ov
+    import openviking.async_client as ov_ac
+except ImportError:
+    print("[ov] OpenViking package not installed.", file=sys.stderr)
+    print("[ov] Install with: pip install openviking", file=sys.stderr)
+    print("[ov] Or ensure py-libs/ is on PYTHONPATH.", file=sys.stderr)
+    sys.exit(1)
 from pathlib import Path
 from functools import wraps
 
+# Determine OpenViking data directory and workspace root, respecting all env vars
 WORKSPACE = os.environ.get("OPENCLAW_DIR", os.path.expanduser("~/.openclaw/workspace"))
-OV_DATA = os.path.join(WORKSPACE, ".openviking")
+_ov_config_file = os.environ.get("OPENVIKING_CONFIG_FILE", "")
+if _ov_config_file and os.path.isfile(_ov_config_file):
+    try:
+        with open(_ov_config_file) as _f:
+            _cfg = json.load(_f)
+        _ws = _cfg.get("storage", {}).get("workspace", "")
+        if _ws:
+            OV_DATA = os.path.abspath(os.path.expanduser(_ws))
+        else:
+            OV_DATA = os.path.join(WORKSPACE, ".openviking")
+    except (json.JSONDecodeError, OSError):
+        OV_DATA = os.path.join(WORKSPACE, ".openviking")
+else:
+    OV_DATA = os.path.join(WORKSPACE, ".openviking")
 
 _client = None
 
@@ -32,6 +53,53 @@ def reset_singleton():
     except Exception:
         pass
 
+def _kill_stale_lock(data_dir):
+    """
+    Check for a stale OpenViking lock and clean it up.
+    Returns True if a stale lock was cleaned up, False otherwise.
+    """
+    pid_path = os.path.join(data_dir, ".openviking.pid")
+    if not os.path.isfile(pid_path):
+        return False
+
+    try:
+        with open(pid_path) as f:
+            pid_str = f.read().strip()
+        pid = int(pid_str)
+    except (ValueError, OSError):
+        # Corrupted pid file — remove it
+        os.unlink(pid_path)
+        return True
+
+    # Check if the process is alive
+    try:
+        os.kill(pid, 0)  # Signal 0 = existence check only
+    except ProcessLookupError:
+        # Process doesn't exist — stale lock, safe to clean
+        print(f"[ov] stale lock: PID {pid} dead; cleaning up", file=sys.stderr)
+        os.unlink(pid_path)
+        return True
+    except PermissionError:
+        # Process exists but owned by another user — can't touch
+        return False
+
+    # Process is alive — check if it's a zombie
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            status = f.read()
+        if "State:\tZ" in status:
+            print(f"[ov] stale lock: PID {pid} is ZOMBIE; killing", file=sys.stderr)
+            try:
+                os.kill(pid, 9)
+                os.unlink(pid_path)
+                return True
+            except Exception:
+                return False
+    except (FileNotFoundError, OSError):
+        pass
+
+    return False
+
 def get_client():
     global _client
     if _client is None:
@@ -39,10 +107,39 @@ def get_client():
             _client = ov.SyncOpenViking(path=OV_DATA)
             _client.initialize()
         except Exception as e:
-            print(f"[ov] init failed: {e}; resetting singleton", file=sys.stderr)
+            err_str = str(e)
+            print(f"[ov] init failed: trying auto-recovery...", file=sys.stderr)
             reset_singleton()
-            _client = ov.SyncOpenViking(path=OV_DATA)
-            _client.initialize()
+
+            # If it's a lock conflict, try to kill stale process before retrying
+            if "Another OpenViking process" in err_str or "DataDirectoryLocked" in err_str:
+                # Try parsing PID from error message
+                m = re.search(r'PID (\d+)', err_str)
+                if m:
+                    stale_pid = int(m.group(1))
+                    try:
+                        os.kill(stale_pid, 0)  # Check if alive
+                        print(f"[ov] another process (PID {stale_pid}) holds the lock; sending SIGTERM", file=sys.stderr)
+                        os.kill(stale_pid, 15)  # SIGTERM
+                        import time
+                        time.sleep(0.5)
+                        try:
+                            os.kill(stale_pid, 0)
+                            os.kill(stale_pid, 9)  # SIGKILL if graceful didn't work
+                        except ProcessLookupError:
+                            pass
+                    except ProcessLookupError:
+                        pass  # Already dead, lock might still be stale
+
+                # Also try pid file cleanup
+                _kill_stale_lock(OV_DATA)
+            # Retry once after cleanup
+            try:
+                _client = ov.SyncOpenViking(path=OV_DATA)
+                _client.initialize()
+            except Exception as e2:
+                print(f"[ov] recovery failed: {e2}", file=sys.stderr)
+                raise
     return _client
 
 def close():
