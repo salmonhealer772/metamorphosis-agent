@@ -30,7 +30,10 @@ Usage:
      -v|--verbose               Displays verbose output
     -nc|--no-colour             Disables colour output
 
-Interactive prompts will ask for agent name, LLM provider, and API key.
+Interactive prompts will ask for:
+  - Install directory (where everything goes, defaults to current dir)
+  - Agent name
+  - LLM provider and API key
 EOF
 }
 
@@ -397,6 +400,20 @@ function env_file_lookup() {
     return 1
 }
 
+# ---- DESC: Prompt for install directory (before any installs) -----------------
+function prompt_install_dir() {
+    echo ""
+    pretty_print "→ Install directory" "${ta_bold}"
+    local _default="$(pwd)"
+    echo "  Default: $_default"
+    echo "  (All agent files — config, workspace, scripts — go here."
+    echo "   Leave empty for the default above.)"
+    read -rp "  Path: " TARGET_DIR
+    if [[ -n "$TARGET_DIR" ]]; then
+        TARGET_DIR="$(realpath -m "$TARGET_DIR" 2>/dev/null || echo "$TARGET_DIR")"
+    fi
+}
+
 # ---- DESC: Gather agent identity from user -----------------------------------
 function gather_identity() {
     echo ""
@@ -467,7 +484,7 @@ function deploy_workspace() {
     fi
     mkdir -p "$workspace_target"
     shopt -s dotglob
-    cp -r "$REPO_DIR/workspace/"* "$workspace_target/"
+    cp -r "$INSTALL_DIR/workspace/"* "$workspace_target/"
     shopt -u dotglob
     cd "$workspace_target"
     # Escape special sed chars and use | delimiter to avoid clashes
@@ -614,12 +631,12 @@ function deploy_scripts() {
     # Agent tools (local to project)
     local tools_dir="$INSTALL_DIR/.openclaw/tools"
     mkdir -p "$tools_dir"
-    cp "$REPO_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
+    cp "$INSTALL_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
     chmod +x "$tools_dir/repomap" 2>/dev/null || true
 
     # Deploy verify scripts to workspace (Bug #4 fix)
-    cp "$REPO_DIR/scripts/verify-openviking.sh" "$WORKSPACE_TARGET/" 2>/dev/null || true
-    cp "$REPO_DIR/scripts/verify-e2e.py" "$WORKSPACE_TARGET/" 2>/dev/null || true
+    cp "$INSTALL_DIR/scripts/verify-openviking.sh" "$WORKSPACE_TARGET/" 2>/dev/null || true
+    cp "$INSTALL_DIR/scripts/verify-e2e.py" "$WORKSPACE_TARGET/" 2>/dev/null || true
     chmod +x "$WORKSPACE_TARGET/verify-openviking.sh" 2>/dev/null || true
 
     # Install aider-chat (repomap dependency)
@@ -757,18 +774,7 @@ function cleanup_portable() {
 
 # ---- DESC: Create HOME symlinks for library compat (post-cleanup) -------------
 function setup_home_symlinks() {
-    local config_src="$INSTALL_DIR/.openviking/ov.conf"
-    local ov_home_dir="$HOME/.openviking"
-    local ov_home_config="$ov_home_dir/ov.conf"
-
-    # Create HOME symlink for OpenViking config (library looks here by default)
-    if [[ -f "$config_src" ]]; then
-        mkdir -p "$ov_home_dir"
-        if [[ ! -e "$ov_home_config" ]]; then
-            ln -s "$config_src" "$ov_home_config"
-            pretty_print "OpenViking config linked: $ov_home_config -> $config_src"
-        fi
-    fi
+    # (HOME symlinks removed — everything stays in INSTALL_DIR)
 
     # Patch ov.py shebang to use venv python (Bug: was using system python3)
     if [[ -f "$WORKSPACE_TARGET/ov.py" ]] && [[ "$OV_PYTHON" != "python3" ]]; then
@@ -803,6 +809,27 @@ function main() {
     export npm_config_cache="$INSTALL_DIR/.npm-cache"
 
     print_banner
+    prompt_install_dir
+
+    # If user specified a different target dir, copy repo there and switch
+    if [[ -n "${TARGET_DIR:-}" && "$TARGET_DIR" != "$INSTALL_DIR" ]]; then
+        mkdir -p "$TARGET_DIR"
+        pretty_print "Copying setup files to $TARGET_DIR…" "${fg_cyan}"
+        shopt -s dotglob
+        for _item in "$REPO_DIR/"*; do
+            local _name
+            _name="$(basename "$_item")"
+            [[ "$_name" == ".git" ]] && continue
+            cp -r "$_item" "$TARGET_DIR/" 2>/dev/null || true
+        done
+        shopt -u dotglob
+        INSTALL_DIR="$TARGET_DIR"
+        WORKSPACE_TARGET="$INSTALL_DIR/.openclaw/workspace"
+        npm_config_cache="$INSTALL_DIR/.npm-cache"
+        cd "$INSTALL_DIR"
+        pretty_print "Installing to: $INSTALL_DIR" "${fg_cyan}"
+    fi
+
     check_prerequisites
     detect_distro
     bootstrap_pip
