@@ -87,7 +87,7 @@ function script_trap_err() {
 
 # ---- DESC: Handler for exiting the script ------------------------------------
 function script_trap_exit() {
-    cd "$orig_cwd"
+    cd "$orig_cwd" 2>/dev/null || true
 
     # Kill any background processes we started
     if [[ -n ${ollama_pid-} ]]; then
