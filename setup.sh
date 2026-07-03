@@ -760,6 +760,10 @@ export OPENCLAW_STATE_DIR="$(pwd)/.openclaw"
 export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
 export npm_config_cache="$(pwd)/.npm-cache"
+# Add venv python to PATH if it exists (so python3 uses the venv interpreter)
+if [[ -d "$(pwd)/.openclaw/venv/bin" ]]; then
+    export PATH="$(pwd)/.openclaw/venv/bin:$PATH"
+fi
 # OpenViking: make py-libs importable + point config file to project-local copy
 export PYTHONPATH="$(pwd)/.openclaw/py-libs:${PYTHONPATH:-}"
 export OPENVIKING_CONFIG_FILE="$(pwd)/.openviking/ov.conf"
