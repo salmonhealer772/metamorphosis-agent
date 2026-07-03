@@ -880,18 +880,14 @@ function main() {
     touch "$INSTALL_DIR/.setup-complete"
 
     echo ""
-    pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"
-    echo ""
-
-    local _run_path="$INSTALL_DIR/run.sh"
-    pretty_print "Start with: $_run_path" "${fg_cyan}"
-
     cd "$INSTALL_DIR"
     if [[ -n "${TARGET_DIR:-}" && "$TARGET_DIR" != "$REPO_DIR" ]]; then
-        pretty_print "Removing original clone…" "${fg_cyan}"
         rm -rf "$REPO_DIR" 2>/dev/null || true
-        pretty_print "Done — everything is in $INSTALL_DIR" "${fg_green}"
     fi
+
+    echo ""
+    pretty_print "✅ Metamorphosis ready in: $INSTALL_DIR" "${fg_green}"
+    pretty_print "   cd $INSTALL_DIR && ./run.sh" "${fg_cyan}"
 }
 
 if ! (return 0 2> /dev/null); then
