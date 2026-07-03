@@ -305,6 +305,9 @@ function setup_pip_install() {
 function install_openviking_pkg() {
     pretty_print "OpenViking (Vector Memory)" "${fg_cyan}"
     
+    # Ensure data dirs exist even if install fails (configs come later)
+    mkdir -p "$WORKSPACE_TARGET/.openviking"
+    
     if $OV_PYTHON -c "import openviking" 2>/dev/null; then
         pretty_print "openviking $($OV_PYTHON -c 'import openviking; print(openviking.__version__)' 2>/dev/null) already installed"
         return
@@ -314,12 +317,11 @@ function install_openviking_pkg() {
     if $PIP_INSTALL openviking 2>&1; then
         pretty_print "openviking installed"
     else
-        pretty_print "openviking install failed" "${fg_yellow}"
-        pretty_print "  Try: $PIP_INSTALL openviking" "${fg_yellow}"
-        pretty_print "  Continuing without vector memory." "${fg_yellow}"
+        pretty_print "⚠  openviking install FAILED" "${fg_red}"
+        pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
+        pretty_print "  Run this manually after setup:" "${fg_yellow}"
+        pretty_print "    $PIP_INSTALL openviking" "${fg_cyan}"
     fi
-
-    mkdir -p "$WORKSPACE_TARGET/.openviking"
 }
 
 # ---- DESC: Install Node.js (if missing) -------------------------------------
@@ -716,10 +718,28 @@ function init_health_state() {
     local disk_pct
 
     curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
+
+    local openviking_reason=""
     if [[ "$ollama_status" = "ok" ]]; then
         cd "$WORKSPACE_TARGET" 2>/dev/null
-        $OV_PYTHON "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
+        if $OV_PYTHON -c "import openviking" 2>/dev/null; then
+            if $OV_PYTHON "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK"; then
+                openviking_status="ok"
+            else
+                openviking_reason="status_check_failed"
+            fi
+        else
+            openviking_reason="package_not_installed"
+        fi
+        if [[ ! -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
+            openviking_reason="missing_config"
+        fi
+        if [[ ! -d "$WORKSPACE_TARGET/.openviking" ]]; then
+            openviking_reason="missing_data_dir"
+        fi
         ollama list 2>&1 | grep -q all-minilm && model_status="ok"
+    else
+        openviking_reason="ollama_down"
     fi
     disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
 
@@ -728,7 +748,7 @@ function init_health_state() {
 {
   "last_checked": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "ollama": { "status": "$ollama_status" },
-  "openviking": { "status": "$openviking_status" },
+  "openviking": { "status": "$openviking_status", "reason": "$openviking_reason" },
   "all_minilm": { "status": "$model_status" },
   "disk": { "status": "ok", "usage_pct": $disk_pct }
 }
