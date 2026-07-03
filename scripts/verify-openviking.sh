@@ -13,6 +13,8 @@ if [ -n "${OPENCLAW_DIR:-}" ] && [ -f "$OPENCLAW_DIR/ov.py" ]; then
     WORKSPACE_DIR="$OPENCLAW_DIR"
 elif [ -f "$PROJECT_ROOT/workspace/ov.py" ]; then
     WORKSPACE_DIR="$PROJECT_ROOT/workspace"
+elif [ -f "$PROJECT_ROOT/.openclaw/workspace/ov.py" ]; then
+    WORKSPACE_DIR="$PROJECT_ROOT/.openclaw/workspace"
 elif [ -f "$SCRIPT_DIR/ov.py" ]; then
     WORKSPACE_DIR="$SCRIPT_DIR"
 elif [ -f "$PROJECT_ROOT/ov.py" ]; then

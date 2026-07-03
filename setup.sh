@@ -309,14 +309,69 @@ function install_openviking_pkg() {
         return
     fi
 
-    pretty_print "Installing openviking (this may take a minute — 50+ dependencies)…" "${fg_cyan}"
-    if $PIP_INSTALL --retries 3 --timeout 120 openviking 2>&1; then
+    pretty_print "Installing openviking (50+ dependencies, may take a minute)…" "${fg_cyan}"
+
+    # Try 5 strategies in order. First one that succeeds wins.
+    local _installed=false
+    local _pip_base="$PIP_INSTALL --retries 3 --timeout 120"
+
+    # Strategy 1: Primary — test PyPI directly first (avoids mirror lag)
+    pretty_print "  Strategy 1/5: pip install (PyPI)…" "${fg_cyan}"
+    if PIP_INDEX_URL="https://pypi.org/simple/" $_pip_base openviking 2>&1; then
+        _installed=true
+    fi
+
+    # Strategy 2: Retry with default mirror (works when PyPI is up but slow)
+    if ! $_installed; then
+        pretty_print "  Strategy 2/5: pip install (default mirror)…" "${fg_cyan}"
+        if $_pip_base openviking 2>&1; then
+            _installed=true
+        fi
+    fi
+
+    # Strategy 3: Install build deps + retry with --no-build-isolation
+    if ! $_installed; then
+        pretty_print "  Strategy 3/5: installing build deps & retrying…" "${fg_cyan}"
+        command -v gcc >/dev/null 2>&1 || apt-get install -y build-essential python3-dev 2>/dev/null || true
+        if $_pip_base --no-build-isolation openviking 2>&1; then
+            _installed=true
+        fi
+    fi
+
+    # Strategy 4: Install without deps first, then let pip resolve deps
+    if ! $_installed; then
+        pretty_print "  Strategy 4/5: pip install (no-deps + resolve)…" "${fg_cyan}"
+        if $_pip_base --no-deps openviking 2>&1 && $_pip_base openviking 2>&1; then
+            _installed=true
+        fi
+    fi
+
+    # Strategy 5: Try uv (faster pip alternative, handles PEP 668 natively)
+    if ! $_installed; then
+        pretty_print "  Strategy 5/5: trying uv…" "${fg_cyan}"
+        if command -v uv >/dev/null 2>&1 || pip install uv -q 2>/dev/null || curl -fsSL https://astral.sh/uv/install.sh | sh 2>/dev/null; then
+            if uv pip install --system openviking 2>&1; then
+                _installed=true
+            fi
+        fi
+    fi
+
+    if $_installed; then
         pretty_print "openviking installed"
+        # Validate: confirm the import actually works with OV_PYTHON
+        if $OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null; then
+            local _ov_ver
+            _ov_ver=$($OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null)
+            pretty_print "OpenViking $_ov_ver verified — import OK" "${fg_green}"
+        else
+            pretty_print "⚠  openviking pip install claimed success but import failed" "${fg_red}"
+            pretty_print "  Run manually: $_pip_base --force-reinstall openviking" "${fg_yellow}"
+        fi
     else
-        pretty_print "⚠  openviking install FAILED" "${fg_red}"
+        pretty_print "⚠  openviking install FAILED (all 5 strategies)" "${fg_red}"
         pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
-        pretty_print "  Run this manually after setup:" "${fg_yellow}"
-        pretty_print "    $PIP_INSTALL --retries 3 --timeout 120 openviking" "${fg_cyan}"
+        pretty_print "  Try manually: $_pip_base openviking" "${fg_yellow}"
+        pretty_print "  Or: PIP_INDEX_URL=https://pypi.org/simple/ $_pip_base openviking" "${fg_yellow}"
     fi
 }
 
