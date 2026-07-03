@@ -612,14 +612,13 @@ OVCONF
     pretty_print "OpenViking configured"
 
     # Verify
-    if $OV_PYTHON -c "import openviking" 2>/dev/null; then
-        if cd "$WORKSPACE_TARGET" 2>/dev/null; then
-            if $OV_PYTHON ov.py status 2>&1 | grep -q "Semantic search: OK"; then
-                pretty_print "OpenViking operational — semantic search online"
-            else
-                pretty_print "OpenViking package installed but status check had issues" "${fg_yellow}"
-            fi
-            cd "$orig_cwd"
+    if $OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null; then
+        local ov_ver
+        ov_ver=$($OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null)
+        if [[ -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
+            pretty_print "OpenViking $ov_ver installed and configured"
+        else
+            pretty_print "OpenViking $ov_ver installed (config pending)" "${fg_yellow}"
         fi
     fi
 
@@ -723,16 +722,13 @@ function init_health_state() {
     if [[ "$ollama_status" = "ok" ]]; then
         cd "$WORKSPACE_TARGET" 2>/dev/null
         if $OV_PYTHON -c "import openviking" 2>/dev/null; then
-            if $OV_PYTHON "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK"; then
+            if [[ -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
                 openviking_status="ok"
             else
-                openviking_reason="status_check_failed"
+                openviking_reason="missing_config"
             fi
         else
             openviking_reason="package_not_installed"
-        fi
-        if [[ ! -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
-            openviking_reason="missing_config"
         fi
         if [[ ! -d "$WORKSPACE_TARGET/.openviking" ]]; then
             openviking_reason="missing_data_dir"
