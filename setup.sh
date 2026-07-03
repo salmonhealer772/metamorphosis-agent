@@ -302,8 +302,8 @@ function setup_pip_install() {
 function install_openviking_pkg() {
     pretty_print "OpenViking (Vector Memory)" "${fg_cyan}"
     
-    if python3 -c "import openviking" 2>/dev/null; then
-        pretty_print "openviking $(python3 -c 'import openviking; print(openviking.__version__)' 2>/dev/null) already installed"
+    if $OV_PYTHON -c "import openviking" 2>/dev/null; then
+        pretty_print "openviking $($OV_PYTHON -c 'import openviking; print(openviking.__version__)' 2>/dev/null) already installed"
         return
     fi
 
@@ -486,7 +486,7 @@ function install_ollama_local() {
     mkdir -p "$dest/bin"
     export PATH="$dest/bin:$PATH"
 
-    python3 -c "import zstandard" 2>/dev/null || {
+    $OV_PYTHON -c "import zstandard" 2>/dev/null || {
         pretty_print "Installing zstandard for Ollama tarball…" "${fg_cyan}"
         $PIP_INSTALL zstandard -q 2>&1 || true
     }
@@ -509,7 +509,7 @@ if os.path.exists(binpath):
     print(f"  Ollama binary at {binpath}")
 PYEOF
 
-    OLLAMA_URL="$url" OLLAMA_DEST="$dest" python3 "$dl_script" || true
+    OLLAMA_URL="$url" OLLAMA_DEST="$dest" $OV_PYTHON "$dl_script" || true
     rm -f "$dl_script"
 }
 
@@ -593,9 +593,9 @@ OVCONF
     pretty_print "OpenViking configured"
 
     # Verify
-    if python3 -c "import openviking" 2>/dev/null; then
+    if $OV_PYTHON -c "import openviking" 2>/dev/null; then
         if cd "$WORKSPACE_TARGET" 2>/dev/null; then
-            if python3 ov.py status 2>&1 | grep -q "Semantic search: OK"; then
+            if $OV_PYTHON ov.py status 2>&1 | grep -q "Semantic search: OK"; then
                 pretty_print "OpenViking operational — semantic search online"
             else
                 pretty_print "OpenViking package installed but status check had issues" "${fg_yellow}"
@@ -623,7 +623,7 @@ function deploy_scripts() {
     chmod +x "$WORKSPACE_TARGET/verify-openviking.sh" 2>/dev/null || true
 
     # Install aider-chat (repomap dependency)
-    if python3 -c "import aider" 2>/dev/null; then
+    if $OV_PYTHON -c "import aider" 2>/dev/null; then
         pretty_print "aider-chat already installed"
     else
         pretty_print "Installing aider-chat (required by repomap)…" "${fg_cyan}"
@@ -701,7 +701,7 @@ function init_health_state() {
     curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
     if [[ "$ollama_status" = "ok" ]]; then
         cd "$WORKSPACE_TARGET" 2>/dev/null
-        python3 "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
+        $OV_PYTHON "$WORKSPACE_TARGET/ov.py" status 2>&1 | grep -q "Semantic search: OK" && openviking_status="ok"
         ollama list 2>&1 | grep -q all-minilm && model_status="ok"
     fi
     disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
@@ -770,18 +770,18 @@ function setup_home_symlinks() {
         fi
     fi
 
+    # Patch ov.py shebang to use venv python (Bug: was using system python3)
+    if [[ -f "$WORKSPACE_TARGET/ov.py" ]] && [[ "$OV_PYTHON" != "python3" ]]; then
+        sed -i "1s|.*|#!$OV_PYTHON|" "$WORKSPACE_TARGET/ov.py"
+        pretty_print "ov.py shebang patched to venv python" "${fg_cyan}"
+    fi
+
     # Index memory if empty (Bug #5 fix)
     local ov_data="$WORKSPACE_TARGET/.openviking"
-    local ov_python="python3"
-    local ov_venv="$INSTALL_DIR/.openclaw/venv"
-    if [[ -f "$ov_venv/bin/python3" ]] && "$ov_venv/bin/python3" -c "import openviking" 2>/dev/null; then
-        ov_python="$ov_venv/bin/python3"
-        pretty_print "Using venv python for OpenViking" "${fg_cyan}"
-    fi
     if [[ -d "$ov_data" && -z "$(ls -A "$ov_data" 2>/dev/null)" ]]; then
-        if "$ov_python" -c "import openviking" 2>/dev/null; then
+        if "$OV_PYTHON" -c "import openviking" 2>/dev/null; then
             pretty_print "Indexing initial workspace memory…" "${fg_cyan}"
-            cd "$WORKSPACE_TARGET" 2>/dev/null && "$ov_python" ov.py index 2>&1 || true
+            cd "$WORKSPACE_TARGET" 2>/dev/null && "$OV_PYTHON" ov.py index 2>&1 || true
             cd "$orig_cwd"
             pretty_print "Initial memory index complete"
         fi
@@ -807,6 +807,15 @@ function main() {
     detect_distro
     bootstrap_pip
     setup_pip_install
+
+    # Pick the right python (venv if bootstrap_pip created one, system otherwise)
+    OV_PYTHON="python3"
+    local ov_venv_detect="$INSTALL_DIR/.openclaw/venv"
+    if [[ -f "$ov_venv_detect/bin/python3" ]]; then
+        OV_PYTHON="$ov_venv_detect/bin/python3"
+        pretty_print "Using venv python for OpenViking" "${fg_cyan}"
+    fi
+
     install_openviking_pkg
     install_nodejs
     install_openclaw
