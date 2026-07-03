@@ -782,6 +782,14 @@ function setup_home_symlinks() {
         pretty_print "ov.py shebang patched to venv python" "${fg_cyan}"
     fi
 
+    # Symlink ov.py onto PATH so users can run it from anywhere
+    local ov_symlink="$INSTALL_DIR/.local/bin/ov.py"
+    if [[ -f "$WORKSPACE_TARGET/ov.py" ]]; then
+        ln -sf "$WORKSPACE_TARGET/ov.py" "$ov_symlink"
+        chmod +x "$ov_symlink"
+        pretty_print "ov.py symlinked to PATH: $ov_symlink" "${fg_cyan}"
+    fi
+
     # Index memory if empty (Bug #5 fix)
     local ov_data="$WORKSPACE_TARGET/.openviking"
     if [[ -d "$ov_data" && -z "$(ls -A "$ov_data" 2>/dev/null)" ]]; then
