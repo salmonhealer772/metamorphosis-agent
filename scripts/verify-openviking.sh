@@ -81,16 +81,22 @@ check "workspace dir exists" "test -d '$OV_DIR'"
 check "ov.py script exists" "test -f '$OV_PY'"
 check "openviking pip package" "$OV_PYTHON -c 'import openviking; v=openviking.__version__; assert len(v) > 0'"
 
+# Detect OpenViking config file for CLI commands
+OV_CONF="$WORKSPACE_DIR/../.openviking/ov.conf"
+if [[ ! -f "$OV_CONF" ]]; then
+    OV_CONF="$HOME/.openviking/ov.conf"
+fi
+
 # ── Layer 3: ov.py CLI checks ──
 echo -e "\n[3] CLI Sanity"
-check "ov.py status works"      "cd '$WORKSPACE_DIR' && $OV_PYTHON '$OV_PY' status 2>&1 | grep -q 'Semantic search: OK'"
-check "ov.py ls returns items"  "cd '$WORKSPACE_DIR' && $OV_PYTHON '$OV_PY' ls 2>&1 | grep -qE '📁|📄'"
-check "ov.py find returns hits" "cd '$WORKSPACE_DIR' && $OV_PYTHON '$OV_PY' find 'openviking memory' 2>&1 | grep -q 'Found'"
+check "ov.py status works"      "cd '$WORKSPACE_DIR' && OPENVIKING_CONFIG_FILE='$OV_CONF' $OV_PYTHON '$OV_PY' status 2>&1 | grep -q 'Semantic search: OK'"
+check "ov.py ls returns items"  "cd '$WORKSPACE_DIR' && OPENVIKING_CONFIG_FILE='$OV_CONF' $OV_PYTHON '$OV_PY' ls 2>&1 | grep -qE '📁|📄'"
+check "ov.py find returns hits" "cd '$WORKSPACE_DIR' && OPENVIKING_CONFIG_FILE='$OV_CONF' $OV_PYTHON '$OV_PY' find 'openviking memory' 2>&1 | grep -q 'Found'"
 
 # ── Layer 4: E2E Store → Find → Delete ──
 echo -e "\n[4] End-to-End (Real Workspace)"
 MARKER="OV_VERIFY_$(date +%s)"
-if [ -f "$OV_E2E" ] && OV_VERIFY_MARKER="$MARKER" $OV_PYTHON "$OV_E2E" 2>/dev/null; then
+if [ -f "$OV_E2E" ] && OV_VERIFY_MARKER="$MARKER" OPENVIKING_CONFIG_FILE="$OV_CONF" $OV_PYTHON "$OV_E2E" 2>/dev/null; then
     echo "  ✅ store+find+delete cycle"
     ((PASS++))
 else

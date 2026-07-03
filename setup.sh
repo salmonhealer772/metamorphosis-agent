@@ -811,7 +811,7 @@ function setup_home_symlinks() {
     if [[ -d "$ov_data" && -z "$(ls -A "$ov_data" 2>/dev/null)" ]]; then
         if "$OV_PYTHON" -c "import openviking" 2>/dev/null; then
             pretty_print "Indexing initial workspace memory…" "${fg_cyan}"
-            cd "$WORKSPACE_TARGET" 2>/dev/null && "$OV_PYTHON" ov.py index 2>&1 || true
+            cd "$WORKSPACE_TARGET" 2>/dev/null && OPENVIKING_CONFIG_FILE="$INSTALL_DIR/.openviking/ov.conf" "$OV_PYTHON" ov.py index 2>&1 || true
             cd "$orig_cwd"
             pretty_print "Initial memory index complete"
         fi
