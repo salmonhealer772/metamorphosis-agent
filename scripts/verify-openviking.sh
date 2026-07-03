@@ -40,6 +40,10 @@ for _venv in "$(dirname "$PROJECT_ROOT")/.openclaw/venv/bin/python3" \
     fi
 done
 
+# Locate OpenViking config file (at INSTALL_DIR/.openviking/ov.conf)
+OV_CONF="$PROJECT_ROOT/../.openviking/ov.conf"
+[[ -f "$OV_CONF" ]] || OV_CONF="$HOME/.openviking/ov.conf"
+
 PASS=0
 FAIL=0
 
@@ -80,12 +84,6 @@ fi
 check "workspace dir exists" "test -d '$OV_DIR'"
 check "ov.py script exists" "test -f '$OV_PY'"
 check "openviking pip package" "$OV_PYTHON -c 'import openviking; v=openviking.__version__; assert len(v) > 0'"
-
-# Detect OpenViking config file for CLI commands
-OV_CONF="$WORKSPACE_DIR/../.openviking/ov.conf"
-if [[ ! -f "$OV_CONF" ]]; then
-    OV_CONF="$HOME/.openviking/ov.conf"
-fi
 
 # ── Layer 3: ov.py CLI checks ──
 echo -e "\n[3] CLI Sanity"

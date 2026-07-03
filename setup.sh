@@ -891,11 +891,10 @@ function main() {
     pretty_print "Start with: $_run_path" "${fg_cyan}"
 
     if [[ -n "${TARGET_DIR:-}" && "$TARGET_DIR" != "$REPO_DIR" ]]; then
-        pretty_print "" "${fg_yellow}"
-        pretty_print "The original clone at $REPO_DIR is no longer needed." "${fg_yellow}"
-        pretty_print "Remove it: rm -rf '$REPO_DIR'" "${fg_yellow}"
-        pretty_print "Then run the agent from your install directory:" "${fg_yellow}"
-        pretty_print "  cd $INSTALL_DIR && ./run.sh" "${fg_cyan}"
+        pretty_print "Removing original clone…" "${fg_cyan}"
+        rm -rf "$REPO_DIR" 2>/dev/null || true
+        pretty_print "Done — everything is in $INSTALL_DIR" "${fg_green}"
+        pretty_print "Run: cd $INSTALL_DIR && ./run.sh" "${fg_cyan}"
     fi
 }
 
