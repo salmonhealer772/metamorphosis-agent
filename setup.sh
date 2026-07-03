@@ -240,33 +240,31 @@ function detect_distro() {
 function bootstrap_pip() {
     pretty_print "Python Package Management" "${fg_cyan}"
 
-    PIP_CMD=""
-    if python3 -m pip --version >/dev/null 2>&1; then
-        PIP_CMD="python3 -m pip"
-        pretty_print "pip already available ($(python3 -m pip --version | cut -d' ' -f2))"
-        return
-    fi
-
-    pretty_print "pip not found — attempting to install…" "${fg_cyan}"
-
-    # pip.pyz (no sudo, handles PEP 668 via --break-system-packages)
-    pretty_print "Installing pip via pip.pyz…" "${fg_cyan}"
-    pretty_print "Downloading pip.pyz…" "${fg_cyan}"
-    if ! curl -sL --connect-timeout 10 https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz 2>/dev/null; then
-        pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
-    fi
-
-    # Use local venv in project dir — avoids ~/.local/, ~/.openviking/ entirely
     local ov_venv="$INSTALL_DIR/.openclaw/venv"
+
+    # Always try to create a venv first — isolates all pip packages and
+    # sidesteps PEP 668 (externally-managed-environment) completely.
+    pretty_print "Creating isolated Python venv…" "${fg_cyan}"
     if python3 -m venv "$ov_venv" 2>&1; then
         PIP_CMD="$ov_venv/bin/pip"
         pretty_print "Created Python venv at $ov_venv"
         return
     fi
+    pretty_print "python3 -m venv failed — trying alternatives…" "${fg_yellow}"
 
-    # Try virtualenv as fallback (can be installed via pip.pyz)
+    # If pip is not available at all, download it
+    PIP_CMD=""
+    if ! python3 -m pip --version >/dev/null 2>&1; then
+        pretty_print "pip not found — installing via pip.pyz…" "${fg_cyan}"
+        if ! curl -sL --connect-timeout 10 https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz 2>/dev/null; then
+            pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
+        fi
+        python3 /tmp/pip.pyz install --break-system-packages pip -q 2>&1 || true
+    fi
+
+    # Try virtualenv as fallback (can create venvs without the venv module)
     if ! python3 -c "import virtualenv" 2>/dev/null; then
-        python3 /tmp/pip.pyz install --break-system-packages virtualenv -q 2>/dev/null || true
+        python3 -m pip install --break-system-packages virtualenv -q 2>/dev/null || true
     fi
     if python3 -c "import virtualenv" 2>/dev/null; then
         python3 -m virtualenv "$ov_venv" 2>&1 && {
@@ -276,13 +274,11 @@ function bootstrap_pip() {
         }
     fi
 
-    # Last resort: use system pip with --prefix to redirect locally
-    if python3 /tmp/pip.pyz install --break-system-packages pip -q 2>&1; then
-        if python3 -m pip --version >/dev/null 2>&1; then
-            PIP_CMD="python3 -m pip"
-            pretty_print "pip via pip.pyz (local prefix only)"
-            return
-        fi
+    # Last resort: use system pip with --target+--break-system-packages
+    if python3 -m pip --version >/dev/null 2>&1; then
+        PIP_CMD="python3 -m pip"
+        pretty_print "Falling back to system pip (will use --break-system-packages)" "${fg_yellow}"
+        return
     fi
 
     pretty_print "No pip available — install pip manually" "${fg_red}"
