@@ -314,13 +314,13 @@ function install_openviking_pkg() {
     fi
 
     pretty_print "Installing openviking (this may take a minute — 50+ dependencies)…" "${fg_cyan}"
-    if $PIP_INSTALL openviking 2>&1; then
+    if $PIP_INSTALL --retries 3 --timeout 120 openviking 2>&1; then
         pretty_print "openviking installed"
     else
         pretty_print "⚠  openviking install FAILED" "${fg_red}"
         pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
         pretty_print "  Run this manually after setup:" "${fg_yellow}"
-        pretty_print "    $PIP_INSTALL openviking" "${fg_cyan}"
+        pretty_print "    $PIP_INSTALL --retries 3 --timeout 120 openviking" "${fg_cyan}"
     fi
 }
 
