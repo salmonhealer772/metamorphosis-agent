@@ -894,8 +894,8 @@ function main() {
         pretty_print "Removing original clone…" "${fg_cyan}"
         rm -rf "$REPO_DIR" 2>/dev/null || true
         pretty_print "Done — everything is in $INSTALL_DIR" "${fg_green}"
-        pretty_print "Run: cd $INSTALL_DIR && ./run.sh" "${fg_cyan}"
     fi
+    cd "$INSTALL_DIR"
 }
 
 if ! (return 0 2> /dev/null); then
