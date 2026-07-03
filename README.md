@@ -23,11 +23,11 @@ Clone the repo, then run setup — it'll ask where you want everything:
 
 ```bash
 git clone https://github.com/salmonhealer772/metamorphosis-agent.git
-cd metamorphosis-agent
-chmod +x setup.sh && ./setup.sh
+bash metamorphosis-agent/setup.sh
 ```
 
-During setup, you'll be prompted for an install directory:
+Notice there's **no `cd` into the clone** — the script runs from wherever
+you are. During setup, you'll be prompted for an install directory:
 
 ```
 → Install directory
@@ -38,7 +38,8 @@ During setup, you'll be prompted for an install directory:
 
 Enter a path like `~/my-agent` and **everything** — config, workspace, scripts,
 dependencies — goes into that one directory. The original clone is
-auto-deleted when setup finishes.
+auto-deleted when setup finishes. Your shell stays wherever it was —
+no getting stranded in an empty directory.
 
 If you want to install right where the clone is, hit Enter to accept the
 default. All files stay inside that directory — no system-wide installs,
