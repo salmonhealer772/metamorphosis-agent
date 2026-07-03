@@ -862,7 +862,17 @@ function main() {
     echo ""
     pretty_print "✅ metamorphosis-agent is ready" "${fg_green}"
     echo ""
-    pretty_print "Start with: ./run.sh" "${fg_cyan}"
+
+    local _run_path="$INSTALL_DIR/run.sh"
+    pretty_print "Start with: $_run_path" "${fg_cyan}"
+
+    if [[ -n "${TARGET_DIR:-}" && "$TARGET_DIR" != "$REPO_DIR" ]]; then
+        pretty_print "" "${fg_yellow}"
+        pretty_print "The original clone at $REPO_DIR is no longer needed." "${fg_yellow}"
+        pretty_print "Remove it: rm -rf '$REPO_DIR'" "${fg_yellow}"
+        pretty_print "Then run the agent from your install directory:" "${fg_yellow}"
+        pretty_print "  cd $INSTALL_DIR && ./run.sh" "${fg_cyan}"
+    fi
 }
 
 if ! (return 0 2> /dev/null); then
