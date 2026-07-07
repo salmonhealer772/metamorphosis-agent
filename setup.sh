@@ -717,6 +717,10 @@ function install_mem0_plugin() {
     pretty_print "Installing @mem0/openclaw-mem0…" "${fg_cyan}"
     if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
         pretty_print "Mem0 plugin installed"
+    # Install missing dependency: mem0ai needs the ollama npm package for OSS mode
+    # but doesn't list it in its package.json dependencies
+    npm install ollama --prefix "$INSTALL_DIR/.openclaw/npm" --no-save 2>&1 || true
+    pretty_print "ollama npm package installed for mem0ai"
     else
         # Fallback: try npm install -g then retry registration
         pretty_print "openclaw plugins install failed — trying npm install as fallback…" "${fg_yellow}"
@@ -761,8 +765,8 @@ entries['session-memory']['enabled'] = False
 # 2. Mem0 plugin config
 plugins = config.setdefault('plugins', {})
 allow = plugins.setdefault('allow', [])
-if 'mem0' not in allow:
-    allow.append('mem0')
+if 'openclaw-mem0' not in allow:
+    allow.append('openclaw-mem0')
 plugins['slots'] = plugins.get('slots', {})
 plugins['slots']['memory'] = 'openclaw-mem0'
 
