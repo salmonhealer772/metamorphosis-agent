@@ -585,72 +585,7 @@ if not search_cfg.get('provider'):
     changed = True
 
 # Resolve LLM provider based on user's choice during gather_identity()
-if auth_choice == 'deepseek-api-key':
-    LLM_CONFIG = {
-        'provider': 'deepseek',
-        'config': {
-            'model': 'deepseek-chat',
-            'apiKey': '${DEEPSEEK_API_KEY}'
-        }
-    }
-elif auth_choice == 'openai-api-key':
-    LLM_CONFIG = {
-        'provider': 'openai',
-        'config': {
-            'model': 'gpt-5-mini',
-            'apiKey': '${OPENAI_API_KEY}'
-        }
-    }
-elif auth_choice == 'apiKey':
-    # Anthropic
-    LLM_CONFIG = {
-        'provider': 'anthropic',
-        'config': {
-            'model': 'claude-sonnet-4-5-20250514',
-            'apiKey': '${ANTHROPIC_API_KEY}'
-        }
-    }
-elif auth_choice == 'gemini-api-key':
-    LLM_CONFIG = {
-        'provider': 'google',
-        'config': {
-            'model': 'gemini-2.0-flash',
-            'apiKey': '${GEMINI_API_KEY}'
-        }
-    }
-elif auth_choice == 'openrouter-api-key':
-    LLM_CONFIG = {
-        'provider': 'openrouter',
-        'config': {
-            'model': 'auto',
-            'apiKey': '${OPENROUTER_API_KEY}'
-        }
-    }
-elif auth_choice in ('xai-api-key', 'mistral-api-key', 'fireworks-api-key', 'together-api-key'):
-    # Generic OpenAI-compatible providers
-    model_map = {
-        'xai-api-key': ('xai', 'grok-2', '${XAI_API_KEY}'),
-        'mistral-api-key': ('mistral', 'mistral-large', '${MISTRAL_API_KEY}'),
-        'fireworks-api-key': ('fireworks', 'auto', '${FIREWORKS_API_KEY}'),
-        'together-api-key': ('together', 'auto', '${TOGETHER_API_KEY}'),
-    }
-    prov, model, key = model_map.get(auth_choice, ('openai', 'gpt-5-mini', '${OPENAI_API_KEY}'))
-    LLM_CONFIG = {
-        'provider': prov,
-        'config': {
-            'model': model,
-            'apiKey': key
-        }
-    }
-else:
-    # Default: Ollama (fully local)
-    LLM_CONFIG = {
-        'provider': 'ollama',
-        'config': {
-            'model': 'qwen2.5:7b',
-            'baseURL': 'http://127.0.0.1:11434'
-        }
-    }
+
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
@@ -838,6 +773,59 @@ plugins['slots']['memory'] = 'openclaw-mem0'
 
 mem0_entry = plugins.setdefault('entries', {}).setdefault('openclaw-mem0', {})
 mem0_entry['enabled'] = True
+# Resolve LLM provider based on user's choice during gather_identity()
+if auth_choice == 'deepseek-api-key':
+    llm_config = {
+        'provider': 'deepseek',
+        'config': {'model': 'deepseek-chat', 'apiKey': '${DEEPSEEK_API_KEY}'}
+    }
+elif auth_choice == 'openai-api-key':
+    llm_config = {
+        'provider': 'openai',
+        'config': {'model': 'gpt-5-mini', 'apiKey': '${OPENAI_API_KEY}'}
+    }
+elif auth_choice == 'apiKey':
+    llm_config = {
+        'provider': 'anthropic',
+        'config': {'model': 'claude-sonnet-4-5-20250514', 'apiKey': '${ANTHROPIC_API_KEY}'}
+    }
+elif auth_choice == 'gemini-api-key':
+    llm_config = {
+        'provider': 'google',
+        'config': {'model': 'gemini-2.0-flash', 'apiKey': '${GEMINI_API_KEY}'}
+    }
+elif auth_choice == 'openrouter-api-key':
+    llm_config = {
+        'provider': 'openrouter',
+        'config': {'model': 'auto', 'apiKey': '${OPENROUTER_API_KEY}'}
+    }
+elif auth_choice == 'xai-api-key':
+    llm_config = {
+        'provider': 'xai',
+        'config': {'model': 'grok-2', 'apiKey': '${XAI_API_KEY}'}
+    }
+elif auth_choice == 'mistral-api-key':
+    llm_config = {
+        'provider': 'mistral',
+        'config': {'model': 'mistral-large', 'apiKey': '${MISTRAL_API_KEY}'}
+    }
+elif auth_choice == 'fireworks-api-key':
+    llm_config = {
+        'provider': 'fireworks',
+        'config': {'model': 'auto', 'apiKey': '${FIREWORKS_API_KEY}'}
+    }
+elif auth_choice == 'together-api-key':
+    llm_config = {
+        'provider': 'together',
+        'config': {'model': 'auto', 'apiKey': '${TOGETHER_API_KEY}'}
+    }
+else:
+    # Default: Ollama (fully local)
+    llm_config = {
+        'provider': 'ollama',
+        'config': {'model': 'qwen2.5:7b', 'baseURL': 'http://127.0.0.1:11434'}
+    }
+
 mem0_entry['config'] = {
     'mode': 'open-source',
     'userId': user_id,
@@ -872,77 +860,10 @@ mem0_entry['config'] = {
                 )
             }
         },
-        'llm': LLM_CONFIG
+        'llm': llm_config
     }
 }
 
-# Resolve LLM provider based on user's choice during gather_identity()
-if auth_choice == 'deepseek-api-key':
-    LLM_CONFIG = {
-        'provider': 'deepseek',
-        'config': {
-            'model': 'deepseek-chat',
-            'apiKey': '${DEEPSEEK_API_KEY}'
-        }
-    }
-elif auth_choice == 'openai-api-key':
-    LLM_CONFIG = {
-        'provider': 'openai',
-        'config': {
-            'model': 'gpt-5-mini',
-            'apiKey': '${OPENAI_API_KEY}'
-        }
-    }
-elif auth_choice == 'apiKey':
-    # Anthropic
-    LLM_CONFIG = {
-        'provider': 'anthropic',
-        'config': {
-            'model': 'claude-sonnet-4-5-20250514',
-            'apiKey': '${ANTHROPIC_API_KEY}'
-        }
-    }
-elif auth_choice == 'gemini-api-key':
-    LLM_CONFIG = {
-        'provider': 'google',
-        'config': {
-            'model': 'gemini-2.0-flash',
-            'apiKey': '${GEMINI_API_KEY}'
-        }
-    }
-elif auth_choice == 'openrouter-api-key':
-    LLM_CONFIG = {
-        'provider': 'openrouter',
-        'config': {
-            'model': 'auto',
-            'apiKey': '${OPENROUTER_API_KEY}'
-        }
-    }
-elif auth_choice in ('xai-api-key', 'mistral-api-key', 'fireworks-api-key', 'together-api-key'):
-    # Generic OpenAI-compatible providers
-    model_map = {
-        'xai-api-key': ('xai', 'grok-2', '${XAI_API_KEY}'),
-        'mistral-api-key': ('mistral', 'mistral-large', '${MISTRAL_API_KEY}'),
-        'fireworks-api-key': ('fireworks', 'auto', '${FIREWORKS_API_KEY}'),
-        'together-api-key': ('together', 'auto', '${TOGETHER_API_KEY}'),
-    }
-    prov, model, key = model_map.get(auth_choice, ('openai', 'gpt-5-mini', '${OPENAI_API_KEY}'))
-    LLM_CONFIG = {
-        'provider': prov,
-        'config': {
-            'model': model,
-            'apiKey': key
-        }
-    }
-else:
-    # Default: Ollama (fully local)
-    LLM_CONFIG = {
-        'provider': 'ollama',
-        'config': {
-            'model': 'qwen2.5:7b',
-            'baseURL': 'http://127.0.0.1:11434'
-        }
-    }
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
