@@ -748,6 +748,14 @@ code = code.replace(old, new)
 with open('$plugin_file', 'w') as f:
     f.write(code)
 "
+        # Bump recall timeout from 8s to 30s (default is too short for DeepSeek + local embeddings)
+        python3 -c "
+with open('$plugin_file', 'r') as f:
+    code = f.read()
+code = code.replace('RECALL_TIMEOUT_MS = 8e3', 'RECALL_TIMEOUT_MS = 30e3')
+with open('$plugin_file', 'w') as f:
+    f.write(code)
+"
         pretty_print "Patched Mem0 plugin for skills + auto-capture compatibility"
     else
         pretty_print "Plugin file not found at expected path — patch skipped" "${fg_yellow}"
