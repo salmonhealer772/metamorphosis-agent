@@ -740,8 +740,15 @@ function deploy_auto_capture_hook() {
     fi
 
     mkdir -p "$managed_hooks"
-    cp -r "$hook_src" "$managed_hooks/"
-    chmod -R 0644 "$managed_hooks/auto-capture-openviking/"
+    # Copy hook files to managed directory.
+    # Use cp -rL to follow symlinks, then fix permissions:
+    # - Directories: 0755 (need +x to be searchable)
+    # - Files: 0644 (world-readable)
+    # chmod -R 0644 on a directory strips the +x bit, making it
+    # unsearchable, so we MUST do files and dirs separately.
+    cp -rL "$hook_src" "$managed_hooks/"
+    find "$managed_hooks/auto-capture-openviking/" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "$managed_hooks/auto-capture-openviking/" -type f -exec chmod 0644 {} + 2>/dev/null || true
 
     pretty_print "Auto-capture hook deployed to $managed_hooks/auto-capture-openviking/"
 }
