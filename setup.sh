@@ -735,95 +735,9 @@ function deploy_auto_capture_hook() {
     local managed_hooks="$INSTALL_DIR/.openclaw/hooks"
 
     if [[ ! -d "$hook_src" ]]; then
-        pretty_print "Hook source not found at $hook_src — creating inline" "${fg_yellow}"
-        mkdir -p "$hook_src"
-
-        cat > "$hook_src/HOOK.md" << 'HOOKEOF'
----
-name: auto-capture-openviking
-description: "Auto-captures every user message and agent response to memory/YYYY-MM-DD.md for passive OpenViking indexing"
-metadata:
-  openclaw:
-    emoji: "🧠"
-    events:
-      - "message:received"
-      - "message:sent"
-    requires:
-      bins: ["node"]
-homepage: "https://github.com/salmonhealer772/metamorphosis-agent"
----
-
-# Auto-Capture OpenViking
-
-Passively stores every conversation turn into the agent's daily memory log.
-OpenViking indexes the file automatically.
-HOOKEOF
-
-        cat > "$hook_src/handler.ts" << 'TSEOF'
-import fs from "node:fs/promises";
-import path from "node:path";
-import os from "node:os";
-
-function getMemoryDir(): string {
-  const workspace =
-    process.env.OPENCLAW_WORKSPACE_DIR ||
-    path.join(os.homedir(), ".openclaw", "workspace");
-  return path.join(workspace, "memory");
-}
-
-function getDateStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getTimestamp(): string {
-  return new Date().toISOString().replace("T", " ").slice(0, 16);
-}
-
-function shouldCapture(event: any): boolean {
-  const content = event.context?.content;
-  if (!content || typeof content !== "string") return false;
-  if (content.trim().length < 2) return false;
-  if (content.trim().startsWith("/")) return false;
-  return true;
-}
-
-async function appendToDailyLog(line: string): Promise<void> {
-  try {
-    const memoryDir = getMemoryDir();
-    await fs.mkdir(memoryDir, { recursive: true });
-    const dailyPath = path.join(memoryDir, `${getDateStr()}.md`);
-    await fs.appendFile(dailyPath, line + "\n", "utf-8");
-  } catch (err) {
-    console.error(
-      "[auto-capture-openviking] Failed to write to daily log:",
-      err instanceof Error ? err.message : String(err)
-    );
-  }
-}
-
-const handler = async (event: any) => {
-  if (event.type !== "message") return;
-  const isReceived = event.action === "received";
-  const isSent = event.action === "sent";
-  if (!isReceived && !isSent) return;
-  if (isSent && event.context?.success === false) return;
-  if (!shouldCapture(event)) return;
-
-  const content = event.context.content.trim();
-  const label = isReceived ? "**User**" : "**Agent**";
-  const timestamp = getTimestamp();
-  const line = `### ${timestamp}\n${label}: ${content}`;
-
-  await appendToDailyLog(line);
-};
-
-export default handler;
-TSEOF
+        pretty_print "Hook source not found at $hook_src — clone the full repo with hooks/ directory" "${fg_red}"
+        exit 1
     fi
-
-    mkdir -p "$managed_hooks"
-    cp -r "$hook_src" "$managed_hooks/"
-    chmod -R 0644 "$managed_hooks/auto-capture-openviking/"
 
     pretty_print "Auto-capture hook deployed to $managed_hooks/auto-capture-openviking/"
 }
