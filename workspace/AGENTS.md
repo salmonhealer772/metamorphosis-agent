@@ -14,16 +14,18 @@ for the runtime to inject it.
 
 **Always run these on startup, before your first response:**
 
-1. Read today's daily log: `python3 ov.py read memory/$(date +%Y-%m-%d).md`
+1. **Check storage health** — read `.openclaw/workspace/.openviking/.store-health`:
+   - If file is missing or `ok: false` → say "⚠️ Memory storage isn't working — I'm running in fallback mode."
+   - If file exists but `last_successful` is more than 5 minutes ago → say "⚠️ Memory storage may have stopped working — last successful write was [time]."
+   - If file looks healthy → continue silently.
+
+2. Read today's daily log: `python3 ov.py read memory/$(date +%Y-%m-%d).md`
    (or `cat .openclaw/workspace/memory/$(date +%Y-%m-%d).md`)
    This loads everything the hook has captured today.
 
-2. Semantic search for context:
+3. Semantic search for context:
    `python3 ov.py find "<context from user's first message>"`
    This pulls relevant past memories across sessions.
-
-3. Check OpenViking health:
-   `python3 ov.py status` — if down, restart Ollama: `ollama serve &`
 
 4. Read `./.openclaw/health-state.json` and report any "down" services.
 
@@ -317,6 +319,9 @@ Your job is to read it.
 ### Startup Sequence (every session)
 
 Before your first response, silently run:
+0. **Check `.openviking/.store-health`** — if stale (>5 min) or missing,
+   warn the user: "⚠️ Memory storage issue: OpenViking hasn't stored any
+   messages since [time]. Falling back to daily log only."
 1. `python3 ov.py read memory/$(date +%Y-%m-%d).md` — load today's captured context
 2. `python3 ov.py find "<context from user's first message>"` — load past memories
 3. `python3 ov.py status` — verify OpenViking is alive

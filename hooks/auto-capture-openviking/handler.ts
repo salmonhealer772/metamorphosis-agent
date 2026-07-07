@@ -117,6 +117,34 @@ async function writeDailyLog(line: string): Promise<void> {
   }
 }
 
+// ── Store health tracking ────────────────────────────────────────────────────
+// Writes a health file after every successful vector store so the agent
+// can check on startup whether memory storage is working.
+// If the health file is stale (>5 min), something is broken.
+
+let storeSuccessCount = 0;
+let storeFailureCount = 0;
+
+function getHealthFilePath(): string {
+  return path.join(getWorkspaceDir(), ".openviking", ".store-health");
+}
+
+async function writeHealth(): Promise<void> {
+  try {
+    const health = {
+      last_successful: new Date().toISOString(),
+      total_stores: storeSuccessCount,
+      total_failures: storeFailureCount,
+      ok: true,
+    };
+    const healthDir = path.dirname(getHealthFilePath());
+    await fs.mkdir(healthDir, { recursive: true });
+    await fs.writeFile(getHealthFilePath(), JSON.stringify(health, null, 2), "utf-8");
+  } catch {
+    // Can't write health file — not critical, don't log
+  }
+}
+
 // ── OpenViking vector store (serialized via promise chain) ──────────────────
 
 /**
@@ -136,10 +164,15 @@ function storeToOV(text: string): Promise<void> {
       { env, timeout: 15_000, maxBuffer: 1024 },
       (err, _stdout, stderr) => {
         if (err) {
+          storeFailureCount++;
           console.error(
-            `[auto-capture] Vector store failed:`,
+            `[auto-capture] Vector store FAILED (${storeFailureCount} failures):`,
             stderr?.trim?.()?.slice(0, 200) || err.message
           );
+        } else {
+          storeSuccessCount++;
+          // Update health file so agent can check storage is working
+          writeHealth();
         }
         resolve();
       }
