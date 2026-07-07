@@ -8,23 +8,29 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 
 ## Session Startup
 
-Use runtime-provided startup context first.
+The auto-capture hook writes every conversation turn to `memory/YYYY-MM-DD.md`.
+On every session start, you MUST proactively load that context — don't wait
+for the runtime to inject it.
 
-That context may already include:
+**Always run these on startup, before your first response:**
 
-- `AGENTS.md`, `SOUL.md`, and `USER.md`
-- recent daily memory such as `memory/YYYY-MM-DD.md`
-- `MEMORY.md` when this is the main session
+1. Read today's daily log: `python3 ov.py read memory/$(date +%Y-%m-%d).md`
+   (or `cat .openclaw/workspace/memory/$(date +%Y-%m-%d).md`)
+   This loads everything the hook has captured today.
 
-**Read `./.openclaw/health-state.json` on startup** — if any service
-reports "down", mention it in your first reply: "Btw, Ollama is down —
-starting it now" or "Disk is getting full."
+2. Semantic search for context:
+   `python3 ov.py find "<context from user's first message>"`
+   This pulls relevant past memories across sessions.
 
-Do not manually reread startup files unless:
+3. Check OpenViking health:
+   `python3 ov.py status` — if down, restart Ollama: `ollama serve &`
 
-1. The user explicitly asks
-2. The provided context is missing something you need
-3. You need a deeper follow-up read beyond the provided startup context
+4. Read `./.openclaw/health-state.json` and report any "down" services.
+
+**The runtime may also inject startup files** (`AGENTS.md`, `SOUL.md`,
+`USER.md`, recent daily logs, `MEMORY.md`). Use those if present, but
+ALWAYS run the steps above regardless — the hook writes to disk, and
+you are responsible for reading from it.
 
 ## Code Comprehension
 
@@ -45,45 +51,30 @@ Works with any git repo. Scans Python, TypeScript, JavaScript, Go, Rust, Java, C
 
 ## Memory
 
-### 🧠 Primary Memory System: OpenViking
+### 🧠 Memory Architecture
 
-**OpenViking is your memory hole.** Don't just write flat files — use it.
+Two layers work together:
 
-A local context database runs at `http://127.0.0.1:11434` (Ollama + all-minilm for embeddings) with `~/.openviking/ov.conf` configured. The OpenViking workspace lives at `.openviking/` in this repo. A CLI helper is at `ov.py`.
+1. **Auto-Capture Hook** (new) — automatically writes every conversation turn
+   to `memory/YYYY-MM-DD.md` via the gateway. No agent involvement needed.
+   The hook fires on `message:received` and `message:sent`, appending `**User**`
+   and `**Agent**` entries with UTC timestamps.
 
-**Every session startup:**
-1. Check OpenViking is alive: `python3 ov.py status`
-2. If Ollama is down, restart: `ollama serve &`
-3. Load relevant context by querying: `python3 ov.py find "context for what I'm doing"`
-4. Use `ov.py store` to persist anything important before session ends
+2. **OpenViking** (semantic search) — `ov.py` indexes the daily log files
+   for cross-session recall. Run `python3 ov.py find "query"` when you need
+   to search past conversations by meaning, not just date.
 
-**Memory workflow:**
-- **Store** important info: `python3 ov.py store "key decision or fact"`
-- **Recall** across sessions: `python3 ov.py find "what we decided about X"`
-- **Index** new files: `python3 ov.py index <path>`
-- **Browse** stored knowledge: `python3 ov.py ls viking://resources`
+### Memory Workflow
 
-Also keep `MEMORY.md` as a curated index/table-of-contents pointing to what's in OpenViking — human-readable summaries of what matters.
+| Action | How it happens |
+|--------|---------------|
+| **Store** every turn | Hook auto-appends to `memory/YYYY-MM-DD.md` |
+| **Recall** at startup | YOU read today's daily log + `ov.py find` (see Session Startup) |
+| **Recall** mid-conversation | `python3 ov.py find "what we decided about X"` |
+| **Index** new files | `python3 ov.py index <path>` |
+| **Explicit store** (rare) | `python3 ov.py store "fact"` — only for things outside conversation |
 
-### Why This Way
-
-Flat files (`MEMORY.md`, `memory/*.md`) are still useful for:
-- Quick human-readable summaries
-- Things that should be obvious at a glance
-
-But OpenViking handles the heavy lifting:
-- Semantic search (not grep)
-- Auto-indexing and summarization
-- Cross-session recall
-- Browsable knowledge tree
-
-Text > Brain. And vector search > text grep.
-
-### Daily Notes (Fallback)
-
-Keep `memory/YYYY-MM-DD.md` for raw session logs as a fallback if OpenViking is ever down.
-
-### 🧠 MEMORY.md - Your Long-Term Memory
+### MEMORY.md - Your Long-Term Memory
 
 - **ONLY load in main session** (direct chats with your human)
 - **DO NOT load in shared contexts** (Discord, group chats, sessions with other people)
@@ -91,7 +82,6 @@ Keep `memory/YYYY-MM-DD.md` for raw session logs as a fallback if OpenViking is 
 - You can **read, edit, and update** MEMORY.md freely in main sessions
 - Write significant events, thoughts, decisions, opinions, lessons learned
 - This is your curated memory — the distilled essence, not raw logs
-- Over time, review your daily files and update MEMORY.md with what's worth keeping
 
 ### 📝 Write It Down - No "Mental Notes"!
 
@@ -321,26 +311,21 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 
 This agent uses OpenViking for persistent cross-session memory.
 Vector storage is at `.openviking/` within the workspace.
+The **auto-capture hook** handles writing every turn to the daily log.
+Your job is to read it.
 
 ### Startup Sequence (every session)
 
 Before your first response, silently run:
-1. `python3 ov.py status` — verify OpenViking is alive
-2. `python3 ov.py find "<context from user's first message>"` — load existing memory
+1. `python3 ov.py read memory/$(date +%Y-%m-%d).md` — load today's captured context
+2. `python3 ov.py find "<context from user's first message>"` — load past memories
+3. `python3 ov.py status` — verify OpenViking is alive
 
-### Auto-Store Triggers (every conversation turn)
+### On-Going Recall (during conversation)
 
-After each response, silently evaluate:
-1. Did the user share new personal info (name, preferences, facts)?
-   → `python3 ov.py store "YYYY-MM-DD — user/preference: <what changed>"`
-2. Did you make a decision together?
-   → `python3 ov.py store "YYYY-MM-DD — decision: <what was decided>"`
-3. Did the user say \"remember\", \"note this\", or equivalent?
-   → store it verbatim
-4. Is this the 10th+ turn since last store?
-   → batch-store session summary
-5. Did something important just happen (error, discovery, insight)?
-   → store it
+The hook writes every turn, but you must actively search memory when context
+might be stale — after compaction, after a long gap, or when the user asks
+something that suggests they've told you before.
 
 ### Pain Neuron Companion
 
