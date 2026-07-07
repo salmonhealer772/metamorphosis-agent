@@ -778,13 +778,31 @@ mem0_entry['config'] = {
     'autoCapture': True,
     'autoRecall': True,
     'topK': 5,
+    'skills': {
+        'triage': {'enabled': True},
+        'recall': {
+            'enabled': True,
+            'tokenBudget': 1500,
+            'rerank': True,
+            'keywordSearch': True,
+            'identityAlwaysInclude': True
+        },
+        'dream': {'enabled': True},
+        'domain': 'companion'
+    },
     'oss': {
         'embedder': {
             'provider': 'ollama',
             'config': {'model': 'nomic-embed-text'}
         },
         'vectorStore': {
-            'provider': 'memory'
+            'provider': 'memory',
+            'config': {
+                'dbPath': os.path.join(
+                    os.path.dirname(os.path.dirname(config_path)),
+                    '.mem0', 'vector_store.db'
+                )
+            }
         },
         'llm': {
             'provider': 'ollama',
