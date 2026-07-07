@@ -584,6 +584,74 @@ if not search_cfg.get('provider'):
     search_cfg['provider'] = 'duckduckgo'
     changed = True
 
+# Resolve LLM provider based on user's choice during gather_identity()
+if auth_choice == 'deepseek-api-key':
+    LLM_CONFIG = {
+        'provider': 'deepseek',
+        'config': {
+            'model': 'deepseek-chat',
+            'apiKey': '${DEEPSEEK_API_KEY}'
+        }
+    }
+elif auth_choice == 'openai-api-key':
+    LLM_CONFIG = {
+        'provider': 'openai',
+        'config': {
+            'model': 'gpt-5-mini',
+            'apiKey': '${OPENAI_API_KEY}'
+        }
+    }
+elif auth_choice == 'apiKey':
+    # Anthropic
+    LLM_CONFIG = {
+        'provider': 'anthropic',
+        'config': {
+            'model': 'claude-sonnet-4-5-20250514',
+            'apiKey': '${ANTHROPIC_API_KEY}'
+        }
+    }
+elif auth_choice == 'gemini-api-key':
+    LLM_CONFIG = {
+        'provider': 'google',
+        'config': {
+            'model': 'gemini-2.0-flash',
+            'apiKey': '${GEMINI_API_KEY}'
+        }
+    }
+elif auth_choice == 'openrouter-api-key':
+    LLM_CONFIG = {
+        'provider': 'openrouter',
+        'config': {
+            'model': 'auto',
+            'apiKey': '${OPENROUTER_API_KEY}'
+        }
+    }
+elif auth_choice in ('xai-api-key', 'mistral-api-key', 'fireworks-api-key', 'together-api-key'):
+    # Generic OpenAI-compatible providers
+    model_map = {
+        'xai-api-key': ('xai', 'grok-2', '${XAI_API_KEY}'),
+        'mistral-api-key': ('mistral', 'mistral-large', '${MISTRAL_API_KEY}'),
+        'fireworks-api-key': ('fireworks', 'auto', '${FIREWORKS_API_KEY}'),
+        'together-api-key': ('together', 'auto', '${TOGETHER_API_KEY}'),
+    }
+    prov, model, key = model_map.get(auth_choice, ('openai', 'gpt-5-mini', '${OPENAI_API_KEY}'))
+    LLM_CONFIG = {
+        'provider': prov,
+        'config': {
+            'model': model,
+            'apiKey': key
+        }
+    }
+else:
+    # Default: Ollama (fully local)
+    LLM_CONFIG = {
+        'provider': 'ollama',
+        'config': {
+            'model': 'qwen2.5:7b',
+            'baseURL': 'http://127.0.0.1:11434'
+        }
+    }
+
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
 
@@ -679,6 +747,23 @@ function cleanup_portable() {
 # ---- DESC: Create HOME symlinks for library compat (post-cleanup) -------------
 
 
+# ---- DESC: Deploy helper scripts ---------------------------------------------
+function deploy_scripts() {
+    # Agent tools (local to project)
+    local tools_dir="$INSTALL_DIR/.openclaw/tools"
+    mkdir -p "$tools_dir"
+    cp "$INSTALL_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
+    chmod +x "$tools_dir/repomap" 2>/dev/null || true
+
+    # Install aider-chat (repomap dependency)
+    if $OV_PYTHON -c "import aider" 2>/dev/null; then
+        pretty_print "aider-chat already installed"
+    else
+        pretty_print "Installing aider-chat (required by repomap)…" "${fg_cyan}"
+        $PIP_INSTALL aider-chat -q 2>&1 || pretty_print "aider-chat install failed" "${fg_yellow}"
+    fi
+}
+
 # ---- DESC: Install and configure Mem0 plugin ---------------------------------
 function install_mem0_plugin() {
     pretty_print "Mem0 Memory Plugin" "${fg_cyan}"
@@ -724,11 +809,13 @@ function install_mem0_plugin() {
     # Patch openclaw.json using Python (same pattern as bootstrap_openclaw)
     OPENCLAW_CONFIG_JSON="$config_path" \
     MEM0_USER_ID="$user_id" \
+    MEM0_AUTH_CHOICE="${AUTH_CHOICE:-ollama}" \
     python3 << 'PYEOF'
 import json, os
 
 config_path = os.environ['OPENCLAW_CONFIG_JSON']
 user_id = os.environ['MEM0_USER_ID']
+auth_choice = os.environ.get('MEM0_AUTH_CHOICE', 'ollama')
 
 with open(config_path, 'r') as f:
     config = json.load(f)
@@ -785,15 +872,77 @@ mem0_entry['config'] = {
                 )
             }
         },
-        'llm': {
-            'provider': 'ollama',
-            'config': {
-                'model': 'qwen2.5:7b',
-                'baseURL': 'http://127.0.0.1:11434'
-            }
-        }
+        'llm': LLM_CONFIG
     }
 }
+
+# Resolve LLM provider based on user's choice during gather_identity()
+if auth_choice == 'deepseek-api-key':
+    LLM_CONFIG = {
+        'provider': 'deepseek',
+        'config': {
+            'model': 'deepseek-chat',
+            'apiKey': '${DEEPSEEK_API_KEY}'
+        }
+    }
+elif auth_choice == 'openai-api-key':
+    LLM_CONFIG = {
+        'provider': 'openai',
+        'config': {
+            'model': 'gpt-5-mini',
+            'apiKey': '${OPENAI_API_KEY}'
+        }
+    }
+elif auth_choice == 'apiKey':
+    # Anthropic
+    LLM_CONFIG = {
+        'provider': 'anthropic',
+        'config': {
+            'model': 'claude-sonnet-4-5-20250514',
+            'apiKey': '${ANTHROPIC_API_KEY}'
+        }
+    }
+elif auth_choice == 'gemini-api-key':
+    LLM_CONFIG = {
+        'provider': 'google',
+        'config': {
+            'model': 'gemini-2.0-flash',
+            'apiKey': '${GEMINI_API_KEY}'
+        }
+    }
+elif auth_choice == 'openrouter-api-key':
+    LLM_CONFIG = {
+        'provider': 'openrouter',
+        'config': {
+            'model': 'auto',
+            'apiKey': '${OPENROUTER_API_KEY}'
+        }
+    }
+elif auth_choice in ('xai-api-key', 'mistral-api-key', 'fireworks-api-key', 'together-api-key'):
+    # Generic OpenAI-compatible providers
+    model_map = {
+        'xai-api-key': ('xai', 'grok-2', '${XAI_API_KEY}'),
+        'mistral-api-key': ('mistral', 'mistral-large', '${MISTRAL_API_KEY}'),
+        'fireworks-api-key': ('fireworks', 'auto', '${FIREWORKS_API_KEY}'),
+        'together-api-key': ('together', 'auto', '${TOGETHER_API_KEY}'),
+    }
+    prov, model, key = model_map.get(auth_choice, ('openai', 'gpt-5-mini', '${OPENAI_API_KEY}'))
+    LLM_CONFIG = {
+        'provider': prov,
+        'config': {
+            'model': model,
+            'apiKey': key
+        }
+    }
+else:
+    # Default: Ollama (fully local)
+    LLM_CONFIG = {
+        'provider': 'ollama',
+        'config': {
+            'model': 'qwen2.5:7b',
+            'baseURL': 'http://127.0.0.1:11434'
+        }
+    }
 
 with open(config_path, 'w') as f:
     json.dump(config, f, indent=2)
