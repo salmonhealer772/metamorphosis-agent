@@ -733,146 +733,18 @@ function install_mem0_plugin() {
         pretty_print "Mem0 plugin installed (npm fallback path)"
     fi
 
-    # Step 2: Configure Mem0 in openclaw.json
-    pretty_print "Configuring Mem0…" "${fg_cyan}"
-    local config_path="$INSTALL_DIR/.openclaw/openclaw.json"
-    local agent_name="${AGENT_NAME:-default}"
-    # Generate unique userId: agent name + 6 random chars
-    local user_suffix=$(tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | head -c 6 || echo "x$(date +%s | tail -c 6)")
-    local user_id="${agent_name}-${user_suffix}"
-
-    # Patch openclaw.json using Python (same pattern as bootstrap_openclaw)
-    OPENCLAW_CONFIG_JSON="$config_path" \
-    MEM0_USER_ID="$user_id" \
-    MEM0_AUTH_CHOICE="${AUTH_CHOICE:-ollama}" \
-    python3 << 'PYEOF'
-import json, os
-
-config_path = os.environ['OPENCLAW_CONFIG_JSON']
-user_id = os.environ['MEM0_USER_ID']
-auth_choice = os.environ.get('MEM0_AUTH_CHOICE', 'ollama')
-
-with open(config_path, 'r') as f:
-    config = json.load(f)
-
-# 1. Disable built-in session-memory hook to avoid double-capture
-hooks = config.setdefault('hooks', {})
-internal = hooks.setdefault('internal', {})
-entries = internal.setdefault('entries', {})
-entries['session-memory'] = entries.get('session-memory', {})
-entries['session-memory']['enabled'] = False
-
-# 2. Set up Mem0 plugin config
-plugins = config.setdefault('plugins', {})
-allow = plugins.setdefault('allow', [])
-if 'mem0' not in allow:
-    allow.append('mem0')
-
-plugins['slots'] = plugins.get('slots', {})
-plugins['slots']['memory'] = 'openclaw-mem0'
-
-mem0_entry = plugins.setdefault('entries', {}).setdefault('openclaw-mem0', {})
-mem0_entry['enabled'] = True
-# Resolve LLM provider based on user's choice during gather_identity()
-if auth_choice == 'deepseek-api-key':
-    llm_config = {
-        'provider': 'deepseek',
-        'config': {'model': 'deepseek-chat', 'apiKey': '${DEEPSEEK_API_KEY}'}
-    }
-elif auth_choice == 'openai-api-key':
-    llm_config = {
-        'provider': 'openai',
-        'config': {'model': 'gpt-5-mini', 'apiKey': '${OPENAI_API_KEY}'}
-    }
-elif auth_choice == 'apiKey':
-    llm_config = {
-        'provider': 'anthropic',
-        'config': {'model': 'claude-sonnet-4-5-20250514', 'apiKey': '${ANTHROPIC_API_KEY}'}
-    }
-elif auth_choice == 'gemini-api-key':
-    llm_config = {
-        'provider': 'google',
-        'config': {'model': 'gemini-2.0-flash', 'apiKey': '${GEMINI_API_KEY}'}
-    }
-elif auth_choice == 'openrouter-api-key':
-    llm_config = {
-        'provider': 'openrouter',
-        'config': {'model': 'auto', 'apiKey': '${OPENROUTER_API_KEY}'}
-    }
-elif auth_choice == 'xai-api-key':
-    llm_config = {
-        'provider': 'xai',
-        'config': {'model': 'grok-2', 'apiKey': '${XAI_API_KEY}'}
-    }
-elif auth_choice == 'mistral-api-key':
-    llm_config = {
-        'provider': 'mistral',
-        'config': {'model': 'mistral-large', 'apiKey': '${MISTRAL_API_KEY}'}
-    }
-elif auth_choice == 'fireworks-api-key':
-    llm_config = {
-        'provider': 'fireworks',
-        'config': {'model': 'auto', 'apiKey': '${FIREWORKS_API_KEY}'}
-    }
-elif auth_choice == 'together-api-key':
-    llm_config = {
-        'provider': 'together',
-        'config': {'model': 'auto', 'apiKey': '${TOGETHER_API_KEY}'}
-    }
-else:
-    # Default: Ollama (fully local)
-    llm_config = {
-        'provider': 'ollama',
-        'config': {'model': 'qwen2.5:7b', 'baseURL': 'http://127.0.0.1:11434'}
-    }
-
-mem0_entry['config'] = {
-    'mode': 'open-source',
-    'userId': user_id,
-    'autoCapture': True,
-    'autoRecall': True,
-    'topK': 5,
-    'skills': {
-        'triage': {'enabled': True},
-        'recall': {
-            'enabled': True,
-            'tokenBudget': 1500,
-            'rerank': True,
-            'keywordSearch': True,
-            'identityAlwaysInclude': True
-        },
-        'dream': {'enabled': True},
-        'domain': 'companion'
-    },
-    'oss': {
-        'embedder': {
-            'provider': 'ollama',
-            'config': {
-                'model': 'nomic-embed-text'
-            }
-        },
-        'vectorStore': {
-            'provider': 'memory',
-            'config': {
-                'dbPath': os.path.join(
-                    os.path.dirname(os.path.dirname(config_path)),
-                    '.mem0', 'vector_store.db'
-                )
-            }
-        },
-        'llm': llm_config
-    }
-}
-
-
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-
-print(f'Mem0 configured: userId={user_id}')
-PYEOF
-
-    pretty_print "Mem0 configured with userId: $user_id"
-
+    # Step 2: Configure Mem0 using its own init command
+    pretty_print "Configuring Mem0 via openclaw mem0 init…" "${fg_cyan}"
+    # The --non-interactive flag skips the wizard. --oss-llm and --oss-embedder
+    # point at Ollama for fully local operation. --oss-vector memory uses the
+    # built-in SQLite store (no Qdrant/PGVector dependency).
+    if "$oc_bin" mem0 init --mode open-source --non-interactive \
+        --oss-llm ollama --oss-embedder ollama --oss-vector memory \
+        --user-id "$user_id" 2>&1; then
+        pretty_print "Mem0 configured successfully"
+    else
+        pretty_print "Mem0 init had issues — run manually: openclaw mem0 init --mode open-source" "${fg_yellow}"
+    fi
     # Step 3: Try to start the gateway so Mem0 loads immediately
     if "$oc_bin" gateway start 2>&1; then
         pretty_print "Gateway started — Mem0 is live" "${fg_green}"
