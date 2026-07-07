@@ -746,11 +746,13 @@ function install_mem0_plugin() {
     local config_path="$INSTALL_DIR/.openclaw/openclaw.json"
     OPENCLAW_CONFIG_JSON="$config_path" \
     MEM0_USER_ID="$user_id" \
+    MEM0_API_KEY="${API_KEY:-}" \
     python3 << 'PYEOF'
 import json, os
 
 config_path = os.environ['OPENCLAW_CONFIG_JSON']
 user_id = os.environ['MEM0_USER_ID']
+api_key = os.environ.get('MEM0_API_KEY', '')
 
 with open(config_path, 'r') as f:
     config = json.load(f)
@@ -783,7 +785,6 @@ def resolve_llm_config(openclaw_config):
             model_id = models[0].get('id', '')
             base_url = prov_cfg.get('baseUrl', '')
             api_type = prov_cfg.get('api', '')
-            # Map OpenClaw provider names to Mem0 provider names
             mem0_providers = {
                 'deepseek': 'deepseek',
                 'openai': 'openai',
@@ -798,13 +799,15 @@ def resolve_llm_config(openclaw_config):
                     'model': model_id,
                 }
             }
+            # Pass the API key that was configured during gather_identity()
+            # This is the same key OpenClaw uses for the provider
+            if api_key and prov_name != 'ollama':
+                llm['config']['apiKey'] = api_key
             if base_url and 'api.deepseek' not in base_url and 'api.openai' not in base_url:
                 llm['config']['baseURL'] = base_url
-            # For Ollama, always set baseURL
             if prov_name == 'ollama' or (base_url and 'localhost' in base_url):
                 llm['config']['baseURL'] = base_url or 'http://127.0.0.1:11434'
             return llm
-    # Fallback: Ollama local
     return {
         'provider': 'ollama',
         'config': {
