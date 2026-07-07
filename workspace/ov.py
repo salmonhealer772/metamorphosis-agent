@@ -303,6 +303,39 @@ def cmd_read(args):
 
 def cmd_index(args):
     path = args[0] if args else WORKSPACE
+
+    # Warn about files exceeding MAX_INDEX_FILE_SIZE before indexing.
+    # These files will be indexed structurally (L0/L1 summaries) but
+    # their full content (L2) will fail embedding if it exceeds the
+    # model's context window.
+    oversized = []
+    if os.path.isdir(path):
+        for root, _dirs, files in os.walk(path):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                try:
+                    fsize = os.path.getsize(fpath)
+                    if fsize > MAX_INDEX_FILE_SIZE:
+                        oversized.append((fpath, fsize))
+                except OSError:
+                    pass
+    elif os.path.isfile(path):
+        try:
+            fsize = os.path.getsize(path)
+            if fsize > MAX_INDEX_FILE_SIZE:
+                oversized.append((path, fsize))
+        except OSError:
+            pass
+
+    if oversized:
+        print(f"Warning: {len(oversized)} file(s) exceed {MAX_INDEX_FILE_SIZE//1024}KB embedding limit:")
+        for fpath, fsize in oversized[:5]:
+            print(f"  {fsize//1024}KB  {fpath}")
+        if len(oversized) > 5:
+            print(f"  ... and {len(oversized) - 5} more")
+        print("These files will be indexed structurally but may not get full embeddings.")
+        print()
+
     c = get_client()
     result = c.add_resource(path=path)
     fc = result.get("meta", {}).get("file_count", "?")
