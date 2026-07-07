@@ -616,7 +616,6 @@ function init_health_state() {
 {
   "last_checked": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "ollama": { "status": "$ollama_status" },
-  "mem0": { "status": "$mem0_status" },
   "disk": { "status": "ok", "usage_pct": $disk_pct }
 }
 EOF
@@ -640,7 +639,7 @@ export npm_config_cache="$(pwd)/.npm-cache"
 if [[ -d "$(pwd)/.openclaw/venv/bin" ]]; then
     export PATH="$(pwd)/.openclaw/venv/bin:$PATH"
 fi
-# Mem0 plugin handles all memory — no Python env vars needed
+# Auto-capture hook handles memory — no Python env vars needed
 
 # Look for openclaw in local install dir, then system PATH
 OPENCLAW_BIN="$(pwd)/.local/bin/openclaw"
@@ -699,205 +698,6 @@ function deploy_scripts() {
     fi
 }
 
-# ---- DESC: Install and configure Mem0 plugin ---------------------------------
-# install_mem0_plugin removed — using auto-capture hook instead
-    pretty_print "Mem0 Memory Plugin" "${fg_cyan}"
-
-    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
-    if [[ ! -f "$oc_bin" ]]; then
-        oc_bin="$(command -v openclaw || true)"
-    fi
-    if [[ -z "$oc_bin" ]]; then
-        pretty_print "OpenClaw binary not found — can't install Mem0 plugin" "${fg_yellow}"
-        pretty_print "  Re-run setup.sh after OpenClaw is installed" "${fg_yellow}"
-        return
-    fi
-
-    # Step 1: Install the plugin from npm
-    pretty_print "Installing @mem0/openclaw-mem0…" "${fg_cyan}"
-    if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
-        pretty_print "Mem0 plugin installed"
-    # Install missing dependency: mem0ai needs the ollama npm package for OSS mode
-    # but doesn't list it in its package.json dependencies
-    npm install ollama --prefix "$INSTALL_DIR/.openclaw/npm" --no-save 2>&1 || true
-    pretty_print "ollama npm package installed for mem0ai"
-    
-
-    # Patch the plugin to allow auto-capture alongside skills mode
-    # v1.0.14 bug: agent_end hook skips auto-capture when skills config is present.
-    local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
-    if [[ -f "$plugin_file" ]]; then
-        python3 -c "
-with open('$plugin_file', 'r') as f:
-    code = f.read()
-# Remove the early return that skips auto-capture when skills mode is active.
-# The original code has:
-#   log('no auto-capture');
-#   });
-#   return;     ← THIS LINE REMOVED
-#   }
-# We keep the }); and } so syntax stays valid, but drop the return.
-old = '''no auto-capture\");
-    });
-    return;
-  }'''
-new = '''no auto-capture, patched to fall through\");
-    });
-  }'''
-code = code.replace(old, new)
-with open('$plugin_file', 'w') as f:
-    f.write(code)
-"
-        # Bump recall timeout from 8s to 30s (default is too short for DeepSeek + local embeddings)
-        python3 -c "
-with open('$plugin_file', 'r') as f:
-    code = f.read()
-code = code.replace('RECALL_TIMEOUT_MS = 8e3', 'RECALL_TIMEOUT_MS = 30e3')
-with open('$plugin_file', 'w') as f:
-    f.write(code)
-"
-        pretty_print "Patched Mem0 plugin for skills + auto-capture compatibility"
-    else
-        pretty_print "Plugin file not found at expected path — patch skipped" "${fg_yellow}"
-    fi
-    else
-        # Fallback: try npm install -g then retry registration
-        pretty_print "openclaw plugins install failed — trying npm install as fallback…" "${fg_yellow}"
-        npm install -g @mem0/openclaw-mem0 2>&1 || {
-            pretty_print "Mem0 plugin install FAILED — no memory will be available" "${fg_red}"
-            pretty_print "  Check network access and try: openclaw plugins install @mem0/openclaw-mem0" "${fg_yellow}"
-            return
-        }
-        # npm install -g only downloads the code — must still register with OpenClaw
-        "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1 || {
-            pretty_print "Mem0 plugin could not be registered with OpenClaw" "${fg_red}"
-            return
-        }
-        pretty_print "Mem0 plugin installed (npm fallback path)"
-    fi
-    # Step 2: Configure Mem0 using its own init command
-
-    # Write Mem0 config manually — openclaw mem0 init isn't available yet
-    # because the CLI hasn't loaded the plugin's commands.
-    local agent_name="${AGENT_NAME:-default}"
-    local user_suffix=$(tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | head -c 6 || echo "x$(date +%s | tail -c 6)")
-    local user_id="${agent_name}-${user_suffix}"
-    local config_path="$INSTALL_DIR/.openclaw/openclaw.json"
-    OPENCLAW_CONFIG_JSON="$config_path" \
-    MEM0_USER_ID="$user_id" \
-    MEM0_API_KEY="${API_KEY:-}" \
-    python3 << 'PYEOF'
-import json, os
-
-config_path = os.environ['OPENCLAW_CONFIG_JSON']
-user_id = os.environ['MEM0_USER_ID']
-api_key = os.environ.get('MEM0_API_KEY', '')
-
-with open(config_path, 'r') as f:
-    config = json.load(f)
-
-# 1. Disable built-in session-memory hook
-hooks = config.setdefault('hooks', {})
-internal = hooks.setdefault('internal', {})
-entries = internal.setdefault('entries', {})
-entries['session-memory'] = entries.get('session-memory', {})
-entries['session-memory']['enabled'] = False
-
-# 2. Mem0 plugin config
-plugins = config.setdefault('plugins', {})
-allow = plugins.setdefault('allow', [])
-if 'openclaw-mem0' not in allow:
-    allow.append('openclaw-mem0')
-plugins['slots'] = plugins.get('slots', {})
-plugins['slots']['memory'] = 'openclaw-mem0'
-
-mem0_entry = plugins.setdefault('entries', {}).setdefault('openclaw-mem0', {})
-mem0_entry['enabled'] = True
-# Read the active LLM provider from OpenClaw's config so Mem0 uses
-# the same provider the rest of the system runs on.
-def resolve_llm_config(openclaw_config):
-    providers = openclaw_config.get('models', {}).get('providers', {})
-    # Find the first configured provider with models
-    for prov_name, prov_cfg in providers.items():
-        models = prov_cfg.get('models', [])
-        if models:
-            model_id = models[0].get('id', '')
-            base_url = prov_cfg.get('baseUrl', '')
-            api_type = prov_cfg.get('api', '')
-            mem0_providers = {
-                'deepseek': 'deepseek',
-                'openai': 'openai',
-                'anthropic': 'anthropic',
-                'google': 'google',
-                'openrouter': 'openrouter',
-            }
-            mem0_name = mem0_providers.get(prov_name, prov_name)
-            llm = {
-                'provider': mem0_name if mem0_name != prov_name else prov_name,
-                'config': {
-                    'model': model_id,
-                }
-            }
-            # Pass the API key that was configured during gather_identity()
-            # This is the same key OpenClaw uses for the provider
-            if api_key and prov_name != 'ollama':
-                llm['config']['apiKey'] = api_key
-            if base_url and 'api.deepseek' not in base_url and 'api.openai' not in base_url:
-                llm['config']['baseURL'] = base_url
-            if prov_name == 'ollama' or (base_url and 'localhost' in base_url):
-                llm['config']['baseURL'] = base_url or 'http://127.0.0.1:11434'
-            return llm
-    return {
-        'provider': 'ollama',
-        'config': {
-            'model': 'qwen2.5:7b',
-            'baseURL': 'http://127.0.0.1:11434'
-        }
-    }
-
-mem0_entry['hooks'] = {
-    'allowConversationAccess': True
-}
-mem0_entry['config'] = {
-    'mode': 'open-source',
-    'userId': user_id,
-    'autoCapture': True,
-    'autoRecall': True,
-    'topK': 5,
-
-    'oss': {
-        'embedder': {
-            'provider': 'ollama',
-            'config': {'model': 'nomic-embed-text'}
-        },
-        'vectorStore': {
-            'provider': 'memory',
-            'config': {
-                'dbPath': os.path.join(
-                    os.path.dirname(os.path.dirname(config_path)),
-                    '.mem0', 'vector_store.db'
-                )
-            }
-        },
-        'llm': resolve_llm_config(config)
-    }
-}
-
-with open(config_path, 'w') as f:
-    json.dump(config, f, indent=2)
-
-print(f'Mem0 configured: userId={user_id}')
-PYEOF
-    pretty_print "Mem0 configured with userId: $user_id"
-    # Step 3: Try to start the gateway so Mem0 loads immediately
-    if "$oc_bin" gateway start 2>&1; then
-        pretty_print "Gateway started — Mem0 is live" "${fg_green}"
-    else
-        pretty_print "Gateway not started (no systemd yet)." "${fg_yellow}"
-        pretty_print "  Start it: openclaw gateway start" "${fg_cyan}"
-    fi
-}
-# ---- DESC: Deploy auto-capture hook for daily log memory --------------------
 function deploy_auto_capture_hook() {
     pretty_print "Auto-Capture Hook" "${fg_cyan}"
     local hook_src="$INSTALL_DIR/hooks/auto-capture-openviking"
@@ -978,7 +778,7 @@ function main() {
     # Deploy auto-capture hook (writes every turn to memory/YYYY-MM-DD.md)
     deploy_auto_capture_hook
     bootstrap_openclaw
-    # Install and configure Mem0 plugin
+    # Deploy auto-capture hook
     init_health_state
     write_run_script
     cleanup_portable
