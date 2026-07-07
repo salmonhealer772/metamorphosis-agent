@@ -735,6 +735,9 @@ function install_mem0_plugin() {
 
     # Step 2: Configure Mem0 using its own init command
     pretty_print "Configuring Mem0 via openclaw mem0 init…" "${fg_cyan}"
+    local agent_name="${AGENT_NAME:-default}"
+    local user_suffix=$(tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | head -c 6 || echo "x$(date +%s | tail -c 6)")
+    local user_id="${agent_name}-${user_suffix}"
     # The --non-interactive flag skips the wizard. --oss-llm and --oss-embedder
     # point at Ollama for fully local operation. --oss-vector memory uses the
     # built-in SQLite store (no Qdrant/PGVector dependency).
