@@ -727,6 +727,107 @@ function deploy_scripts() {
 }
 
 
+# ---- DESC: Deploy auto-capture hook for passive OpenViking memory ------------
+function deploy_auto_capture_hook() {
+    pretty_print "Auto-Capture Hook" "${fg_cyan}"
+
+    local hook_src="$INSTALL_DIR/hooks/auto-capture-openviking"
+    local managed_hooks="$INSTALL_DIR/.openclaw/hooks"
+
+    if [[ ! -d "$hook_src" ]]; then
+        pretty_print "Hook source not found at $hook_src — creating inline" "${fg_yellow}"
+        mkdir -p "$hook_src"
+
+        cat > "$hook_src/HOOK.md" << 'HOOKEOF'
+---
+name: auto-capture-openviking
+description: "Auto-captures every user message and agent response to memory/YYYY-MM-DD.md for passive OpenViking indexing"
+metadata:
+  openclaw:
+    emoji: "🧠"
+    events:
+      - "message:received"
+      - "message:sent"
+    requires:
+      bins: ["node"]
+homepage: "https://github.com/salmonhealer772/metamorphosis-agent"
+---
+
+# Auto-Capture OpenViking
+
+Passively stores every conversation turn into the agent's daily memory log.
+OpenViking indexes the file automatically.
+HOOKEOF
+
+        cat > "$hook_src/handler.ts" << 'TSEOF'
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+
+function getMemoryDir(): string {
+  const workspace =
+    process.env.OPENCLAW_WORKSPACE_DIR ||
+    path.join(os.homedir(), ".openclaw", "workspace");
+  return path.join(workspace, "memory");
+}
+
+function getDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getTimestamp(): string {
+  return new Date().toISOString().replace("T", " ").slice(0, 16);
+}
+
+function shouldCapture(event: any): boolean {
+  const content = event.context?.content;
+  if (!content || typeof content !== "string") return false;
+  if (content.trim().length < 2) return false;
+  if (content.trim().startsWith("/")) return false;
+  return true;
+}
+
+async function appendToDailyLog(line: string): Promise<void> {
+  try {
+    const memoryDir = getMemoryDir();
+    await fs.mkdir(memoryDir, { recursive: true });
+    const dailyPath = path.join(memoryDir, `${getDateStr()}.md`);
+    await fs.appendFile(dailyPath, line + "\n", "utf-8");
+  } catch (err) {
+    console.error(
+      "[auto-capture-openviking] Failed to write to daily log:",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+const handler = async (event: any) => {
+  if (event.type !== "message") return;
+  const isReceived = event.action === "received";
+  const isSent = event.action === "sent";
+  if (!isReceived && !isSent) return;
+  if (isSent && event.context?.success === false) return;
+  if (!shouldCapture(event)) return;
+
+  const content = event.context.content.trim();
+  const label = isReceived ? "**User**" : "**Agent**";
+  const timestamp = getTimestamp();
+  const line = `### ${timestamp}\n${label}: ${content}`;
+
+  await appendToDailyLog(line);
+};
+
+export default handler;
+TSEOF
+    fi
+
+    mkdir -p "$managed_hooks"
+    cp -r "$hook_src" "$managed_hooks/"
+    chmod -R 0644 "$managed_hooks/auto-capture-openviking/"
+
+    pretty_print "Auto-capture hook deployed to $managed_hooks/auto-capture-openviking/"
+}
+
 # ---- DESC: Bootstrap OpenClaw configuration ----------------------------------
 function bootstrap_openclaw() {
     echo ""
@@ -849,6 +950,7 @@ function write_run_script() {
 cd "$(dirname "$0")"
 export OPENCLAW_STATE_DIR="$(pwd)/.openclaw"
 export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
+export OPENCLAW_WORKSPACE_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
 export npm_config_cache="$(pwd)/.npm-cache"
 # Add venv python to PATH if it exists (so python3 uses the venv interpreter)
@@ -982,7 +1084,16 @@ function main() {
     deploy_workspace
     setup_vector_memory
     deploy_scripts
+    deploy_auto_capture_hook
     bootstrap_openclaw
+    # Auto-enable the auto-capture hook
+    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
+    export OPENCLAW_DIR="$WORKSPACE_TARGET"
+    if "$INSTALL_DIR/.local/bin/openclaw" hooks enable auto-capture-openviking 2>&1; then
+        pretty_print "Auto-capture hook enabled"
+    else
+        pretty_print "Could not auto-enable hook — run manually: openclaw hooks enable auto-capture-openviking" "${fg_yellow}"
+    fi
     init_health_state
     write_run_script
     cleanup_portable
