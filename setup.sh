@@ -739,6 +739,10 @@ function deploy_auto_capture_hook() {
         exit 1
     fi
 
+    mkdir -p "$managed_hooks"
+    cp -r "$hook_src" "$managed_hooks/"
+    chmod -R 0644 "$managed_hooks/auto-capture-openviking/"
+
     pretty_print "Auto-capture hook deployed to $managed_hooks/auto-capture-openviking/"
 }
 
