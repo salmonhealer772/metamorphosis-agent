@@ -700,7 +700,7 @@ function deploy_scripts() {
 }
 
 # ---- DESC: Install and configure Mem0 plugin ---------------------------------
-function install_mem0_plugin() {
+# install_mem0_plugin removed — using auto-capture hook instead
     pretty_print "Mem0 Memory Plugin" "${fg_cyan}"
 
     local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
@@ -897,6 +897,30 @@ PYEOF
         pretty_print "  Start it: openclaw gateway start" "${fg_cyan}"
     fi
 }
+# ---- DESC: Deploy auto-capture hook for daily log memory --------------------
+function deploy_auto_capture_hook() {
+    pretty_print "Auto-Capture Hook" "${fg_cyan}"
+    local hook_src="$INSTALL_DIR/hooks/auto-capture-openviking"
+    local managed_hooks="$INSTALL_DIR/.openclaw/hooks"
+    if [[ ! -d "$hook_src" ]]; then
+        pretty_print "Hook source not found — clone the full repo" "${fg_red}"
+        exit 1
+    fi
+    mkdir -p "$managed_hooks"
+    cp -rL "$hook_src" "$managed_hooks/"
+    find "$managed_hooks/auto-capture-openviking/" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "$managed_hooks/auto-capture-openviking/" -type f -exec chmod 0644 {} + 2>/dev/null || true
+    pretty_print "Auto-capture hook deployed"
+    # Enable the hook
+    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
+    export OPENCLAW_DIR="$WORKSPACE_TARGET"
+    if "$INSTALL_DIR/.local/bin/openclaw" hooks enable auto-capture-openviking 2>&1; then
+        pretty_print "Auto-capture hook enabled"
+    else
+        pretty_print "Enable manually: openclaw hooks enable auto-capture-openviking" "${fg_yellow}"
+    fi
+}
+
 function main() {
     trap script_trap_err ERR
     trap script_trap_exit EXIT
@@ -951,9 +975,10 @@ function main() {
     gather_identity
     deploy_workspace
     deploy_scripts
+    # Deploy auto-capture hook (writes every turn to memory/YYYY-MM-DD.md)
+    deploy_auto_capture_hook
     bootstrap_openclaw
     # Install and configure Mem0 plugin
-    install_mem0_plugin
     init_health_state
     write_run_script
     cleanup_portable
