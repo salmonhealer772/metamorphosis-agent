@@ -732,16 +732,72 @@ function install_mem0_plugin() {
         }
         pretty_print "Mem0 plugin installed (npm fallback path)"
     fi
-
     # Step 2: Configure Mem0 using its own init command
-    pretty_print "Configuring Mem0 via openclaw mem0 init…" "${fg_cyan}"
-    # --oss-llm and --oss-embedder flags make the init command non-interactive.
-    # Omitting --oss-vector defaults to the built-in SQLite store.
-    if "$oc_bin" mem0 init --mode open-source \
-        --oss-llm ollama --oss-embedder ollama 2>&1; then
-        pretty_print "Mem0 configured successfully"
-    else
-        pretty_print "Mem0 init had issues — run manually: openclaw mem0 init --mode open-source" "${fg_yellow}"
+
+    # Write Mem0 config manually — openclaw mem0 init isn't available yet
+    # because the CLI hasn't loaded the plugin's commands.
+    local agent_name="${AGENT_NAME:-default}"
+    local user_suffix=$(tr -dc 'a-z0-9' < /dev/urandom 2>/dev/null | head -c 6 || echo "x$(date +%s | tail -c 6)")
+    local user_id="${agent_name}-${user_suffix}"
+    local config_path="$INSTALL_DIR/.openclaw/openclaw.json"
+    OPENCLAW_CONFIG_JSON="$config_path" \
+    MEM0_USER_ID="$user_id" \
+    python3 << 'PYEOF'
+import json, os
+
+config_path = os.environ['OPENCLAW_CONFIG_JSON']
+user_id = os.environ['MEM0_USER_ID']
+
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+# 1. Disable built-in session-memory hook
+hooks = config.setdefault('hooks', {})
+internal = hooks.setdefault('internal', {})
+entries = internal.setdefault('entries', {})
+entries['session-memory'] = entries.get('session-memory', {})
+entries['session-memory']['enabled'] = False
+
+# 2. Mem0 plugin config
+plugins = config.setdefault('plugins', {})
+allow = plugins.setdefault('allow', [])
+if 'mem0' not in allow:
+    allow.append('mem0')
+plugins['slots'] = plugins.get('slots', {})
+plugins['slots']['memory'] = 'openclaw-mem0'
+
+mem0_entry = plugins.setdefault('entries', {}).setdefault('openclaw-mem0', {})
+mem0_entry['enabled'] = True
+mem0_entry['config'] = {
+    'mode': 'open-source',
+    'userId': user_id,
+    'autoCapture': True,
+    'autoRecall': True,
+    'topK': 5,
+    'oss': {
+        'embedder': {
+            'provider': 'ollama',
+            'config': {'model': 'nomic-embed-text'}
+        },
+        'vectorStore': {
+            'provider': 'memory'
+        },
+        'llm': {
+            'provider': 'ollama',
+            'config': {
+                'model': 'qwen2.5:7b',
+                'baseURL': 'http://127.0.0.1:11434'
+            }
+        }
+    }
+}
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f'Mem0 configured: userId={user_id}')
+PYEOF
+    pretty_print "Mem0 configured with userId: $user_id"
     fi
     # Step 3: Try to start the gateway so Mem0 loads immediately
     if "$oc_bin" gateway start 2>&1; then
