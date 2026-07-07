@@ -798,7 +798,6 @@ with open(config_path, 'w') as f:
 print(f'Mem0 configured: userId={user_id}')
 PYEOF
     pretty_print "Mem0 configured with userId: $user_id"
-    fi
     # Step 3: Try to start the gateway so Mem0 loads immediately
     if "$oc_bin" gateway start 2>&1; then
         pretty_print "Gateway started — Mem0 is live" "${fg_green}"
