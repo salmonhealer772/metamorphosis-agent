@@ -728,15 +728,22 @@ function install_mem0_plugin() {
     local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
     if [[ -f "$plugin_file" ]]; then
         python3 -c "
-import re
 with open('$plugin_file', 'r') as f:
     code = f.read()
-old = '''api.logger.info(\"openclaw-mem0: skills-mode agent_end (no auto-capture)\");
+# Remove the early return that skips auto-capture when skills mode is active.
+# The original code has:
+#   log('no auto-capture');
+#   });
+#   return;     ← THIS LINE REMOVED
+#   }
+# We keep the }); and } so syntax stays valid, but drop the return.
+old = '''no auto-capture\");
     });
     return;
   }'''
-new = '''api.logger.info(\"openclaw-mem0: skills-mode agent_end (auto-capture alongside)\");
-    });'''
+new = '''no auto-capture, patched to fall through\");
+    });
+  }'''
 code = code.replace(old, new)
 with open('$plugin_file', 'w') as f:
     f.write(code)
