@@ -816,13 +816,13 @@ def resolve_llm_config(openclaw_config):
         }
     }
 
+mem0_entry['hooks'] = {
+    'allowConversationAccess': True
+}
 mem0_entry['config'] = {
     'mode': 'open-source',
     'userId': user_id,
     'autoCapture': True,
-    'hooks': {
-        'allowConversationAccess': True
-    },
     'autoRecall': True,
     'topK': 5,
     'skills': {
