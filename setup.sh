@@ -772,6 +772,47 @@ plugins['slots']['memory'] = 'openclaw-mem0'
 
 mem0_entry = plugins.setdefault('entries', {}).setdefault('openclaw-mem0', {})
 mem0_entry['enabled'] = True
+# Read the active LLM provider from OpenClaw's config so Mem0 uses
+# the same provider the rest of the system runs on.
+def resolve_llm_config(openclaw_config):
+    providers = openclaw_config.get('models', {}).get('providers', {})
+    # Find the first configured provider with models
+    for prov_name, prov_cfg in providers.items():
+        models = prov_cfg.get('models', [])
+        if models:
+            model_id = models[0].get('id', '')
+            base_url = prov_cfg.get('baseUrl', '')
+            api_type = prov_cfg.get('api', '')
+            # Map OpenClaw provider names to Mem0 provider names
+            mem0_providers = {
+                'deepseek': 'deepseek',
+                'openai': 'openai',
+                'anthropic': 'anthropic',
+                'google': 'google',
+                'openrouter': 'openrouter',
+            }
+            mem0_name = mem0_providers.get(prov_name, prov_name)
+            llm = {
+                'provider': mem0_name if mem0_name != prov_name else prov_name,
+                'config': {
+                    'model': model_id,
+                }
+            }
+            if base_url and 'api.deepseek' not in base_url and 'api.openai' not in base_url:
+                llm['config']['baseURL'] = base_url
+            # For Ollama, always set baseURL
+            if prov_name == 'ollama' or (base_url and 'localhost' in base_url):
+                llm['config']['baseURL'] = base_url or 'http://127.0.0.1:11434'
+            return llm
+    # Fallback: Ollama local
+    return {
+        'provider': 'ollama',
+        'config': {
+            'model': 'qwen2.5:7b',
+            'baseURL': 'http://127.0.0.1:11434'
+        }
+    }
+
 mem0_entry['config'] = {
     'mode': 'open-source',
     'userId': user_id,
@@ -804,13 +845,7 @@ mem0_entry['config'] = {
                 )
             }
         },
-        'llm': {
-            'provider': 'ollama',
-            'config': {
-                'model': 'qwen2.5:7b',
-                'baseURL': 'http://127.0.0.1:11434'
-            }
-        }
+        'llm': resolve_llm_config(config)
     }
 }
 
