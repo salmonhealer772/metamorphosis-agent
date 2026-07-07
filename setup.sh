@@ -721,6 +721,30 @@ function install_mem0_plugin() {
     # but doesn't list it in its package.json dependencies
     npm install ollama --prefix "$INSTALL_DIR/.openclaw/npm" --no-save 2>&1 || true
     pretty_print "ollama npm package installed for mem0ai"
+    
+
+    # Patch the plugin to allow auto-capture alongside skills mode
+    # v1.0.14 bug: agent_end hook skips auto-capture when skills config is present.
+    local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
+    if [[ -f "$plugin_file" ]]; then
+        python3 -c "
+import re
+with open('$plugin_file', 'r') as f:
+    code = f.read()
+old = '''api.logger.info(\"openclaw-mem0: skills-mode agent_end (no auto-capture)\");
+    });
+    return;
+  }'''
+new = '''api.logger.info(\"openclaw-mem0: skills-mode agent_end (auto-capture alongside)\");
+    });'''
+code = code.replace(old, new)
+with open('$plugin_file', 'w') as f:
+    f.write(code)
+"
+        pretty_print "Patched Mem0 plugin for skills + auto-capture compatibility"
+    else
+        pretty_print "Plugin file not found at expected path — patch skipped" "${fg_yellow}"
+    fi
     else
         # Fallback: try npm install -g then retry registration
         pretty_print "openclaw plugins install failed — trying npm install as fallback…" "${fg_yellow}"
