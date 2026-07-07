@@ -423,15 +423,31 @@ function install_nodejs() {
 
 # ---- DESC: Install or verify OpenClaw CLI ------------------------------------
 function install_openclaw() {
-    if ! command -v openclaw >/dev/null 2>&1; then
+    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
+
+    if ! command -v openclaw >/dev/null 2>&1 && [[ ! -f "$oc_bin" ]]; then
         pretty_print "Installing OpenClaw…" "${fg_cyan}"
         # Override HOME so npm + openclaw postinstall write to tmp, not ~/
         HOME=/tmp npm install -g openclaw --prefix="$INSTALL_DIR/.local" 2>&1 || \
             npm install -g openclaw --prefix="$INSTALL_DIR/.local"
         # Move any stray ~/.openclaw/ into project dir
         if [[ -d "$HOME/.openclaw" ]]; then
+            mkdir -p "$INSTALL_DIR/.leaks"
             mv "$HOME/.openclaw" "$INSTALL_DIR/.leaks/.openclaw-npm" 2>/dev/null || rm -rf "$HOME/.openclaw" 2>/dev/null || true
         fi
+    fi
+
+    # VERIFY the binary actually exists — either system-wide or local
+    if ! command -v openclaw >/dev/null 2>&1 && [[ ! -f "$oc_bin" ]]; then
+        pretty_print "OpenClaw install FAILED — binary not found at $oc_bin" "${fg_red}"
+        pretty_print "  Try manually: npm install -g openclaw --prefix=\"$INSTALL_DIR/.local\"" "${fg_yellow}"
+        pretty_print "  Or install system-wide: npm install -g openclaw" "${fg_yellow}"
+        if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+            pretty_print "  node $(node --version) and npm $(npm --version) are available" "${fg_cyan}"
+        else
+            pretty_print "  node/npm not found — install Node.js 18+ first" "${fg_yellow}"
+        fi
+        exit 1
     fi
     pretty_print "OpenClaw ready"
 }
@@ -536,9 +552,13 @@ function deploy_workspace() {
         pretty_print "Backed up existing workspace" "${fg_yellow}"
     fi
     mkdir -p "$workspace_target"
-    shopt -s dotglob
-    cp -r "$INSTALL_DIR/workspace/"* "$workspace_target/"
-    shopt -u dotglob
+    if [[ -d "$INSTALL_DIR/workspace" ]]; then
+        shopt -s dotglob
+        cp -r "$INSTALL_DIR/workspace/"* "$workspace_target/" 2>/dev/null || true
+        shopt -u dotglob
+    else
+        pretty_print "WARNING: workspace/ directory missing in source — deploying defaults" "${fg_yellow}"
+    fi
     cd "$workspace_target"
     # Escape special sed chars and use | delimiter to avoid clashes
     local sn="${AGENT_NAME//\\/\\\\}"; sn="${sn//|/\|}"; sn="${sn//&/\\&}"
@@ -710,8 +730,18 @@ function bootstrap_openclaw() {
     # Use a writable tmp HOME so openclaw doesn't touch ~/ or fail on /tmp
     local oc_home="$INSTALL_DIR/.tmp-oc-home"
     mkdir -p "$oc_home"
-    HOME="$oc_home" "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
-    HOME="$oc_home" "$INSTALL_DIR/.local/bin/openclaw" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
+    # Find openclaw binary (local install or system-wide)
+    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
+    if [[ ! -f "$oc_bin" ]]; then
+        oc_bin="$(command -v openclaw || true)"
+    fi
+    if [[ -z "$oc_bin" ]]; then
+        pretty_print "OpenClaw binary not found — can't configure provider" "${fg_yellow}"
+        pretty_print "  Re-run setup.sh after OpenClaw is installed" "${fg_yellow}"
+        return
+    fi
+    HOME="$oc_home" "$oc_bin" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
+    HOME="$oc_home" "$oc_bin" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
         pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
     # Clean up temp home
     rm -rf "$oc_home" 2>/dev/null || true
@@ -822,7 +852,24 @@ fi
 # OpenViking: make py-libs importable + point config file to project-local copy
 export PYTHONPATH="$(pwd)/.openclaw/py-libs:${PYTHONPATH:-}"
 export OPENVIKING_CONFIG_FILE="$(pwd)/.openviking/ov.conf"
-exec "$(pwd)/.local/bin/openclaw" "$@"
+
+# Look for openclaw in local install dir, then system PATH
+OPENCLAW_BIN="$(pwd)/.local/bin/openclaw"
+if [[ ! -f "$OPENCLAW_BIN" ]]; then
+    if command -v openclaw >/dev/null 2>&1; then
+        OPENCLAW_BIN="$(command -v openclaw)"
+    else
+        echo "" >&2
+        echo "ERROR: OpenClaw binary not found." >&2
+        echo "  Tried: $OPENCLAW_BIN" >&2
+        echo "  Re-run setup.sh, or install manually:" >&2
+        echo "    npm install -g openclaw" >&2
+        echo "" >&2
+        exit 1
+    fi
+fi
+
+exec "$OPENCLAW_BIN" "$@"
 RUNEOF
     chmod +x "$INSTALL_DIR/run.sh"
     pretty_print "Run script: ./run.sh"
