@@ -636,19 +636,24 @@ function setup_vector_memory() {
         if curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
             pretty_print "Ollama running on localhost:11434"
 
-            # Pull model (service is up, so this works)
-            pretty_print "Pulling embedding model (all-minilm)…" "${fg_cyan}"
-            if ollama pull all-minilm 2>&1; then
-                pretty_print "Embedding model ready"
+            # Pull primary embedding model: nomic-embed-text (8192 token context, 768 dim)
+            # This handles large files that all-minilm (512 ctx) can't process.
+            pretty_print "Pulling embedding model (nomic-embed-text)…" "${fg_cyan}"
+            if ollama pull nomic-embed-text 2>&1; then
+                pretty_print "Primary embedding model ready (8192 ctx, 768 dim)"
             else
                 pretty_print "First pull failed — retrying…" "${fg_yellow}"
                 sleep 3
-                if ollama pull all-minilm 2>&1; then
-                    pretty_print "Embedding model ready (retry)"
+                if ollama pull nomic-embed-text 2>&1; then
+                    pretty_print "Primary embedding model ready (retry)"
                 else
-                    pretty_print "Pull failed — run ollama pull all-minilm later" "${fg_yellow}"
+                    pretty_print "Pull failed — run ollama pull nomic-embed-text later" "${fg_yellow}"
                 fi
             fi
+
+            # Pull legacy all-minilm for backward compatibility
+            pretty_print "Pulling legacy model (all-minilm)…" "${fg_cyan}"
+            ollama pull all-minilm 2>&1 || true
         else
             pretty_print "Ollama not reachable" "${fg_yellow}"
         fi
@@ -669,9 +674,10 @@ function setup_vector_memory() {
     "dense": {
       "provider": "ollama",
       "api_base": "http://127.0.0.1:11434/v1",
-      "model": "all-minilm",
-      "dimension": 384
+      "model": "nomic-embed-text",
+      "dimension": 768
     },
+    "max_input_tokens": 4096,
     "max_concurrent": 2
   },
   "log": {
@@ -814,7 +820,7 @@ function init_health_state() {
         if [[ ! -d "$WORKSPACE_TARGET/.openviking" ]]; then
             openviking_reason="missing_data_dir"
         fi
-        ollama list 2>&1 | grep -q all-minilm && model_status="ok"
+        ollama list 2>&1 | grep -q nomic-embed-text && model_status="ok"
     else
         openviking_reason="ollama_down"
     fi

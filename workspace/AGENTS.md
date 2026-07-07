@@ -317,6 +317,39 @@ Think of it like a human reviewing their journal and updating their mental model
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 
+## 🧠 Memory Reflex — Auto-OpenViking
+
+This agent uses OpenViking for persistent cross-session memory.
+Vector storage is at `.openviking/` within the workspace.
+
+### Startup Sequence (every session)
+
+Before your first response, silently run:
+1. `python3 ov.py status` — verify OpenViking is alive
+2. `python3 ov.py find "<context from user's first message>"` — load existing memory
+
+### Auto-Store Triggers (every conversation turn)
+
+After each response, silently evaluate:
+1. Did the user share new personal info (name, preferences, facts)?
+   → `python3 ov.py store "YYYY-MM-DD — user/preference: <what changed>"`
+2. Did you make a decision together?
+   → `python3 ov.py store "YYYY-MM-DD — decision: <what was decided>"`
+3. Did the user say \"remember\", \"note this\", or equivalent?
+   → store it verbatim
+4. Is this the 10th+ turn since last store?
+   → batch-store session summary
+5. Did something important just happen (error, discovery, insight)?
+   → store it
+
+### Pain Neuron Companion
+
+Alongside the `~/.openclaw/pain-signal.json` check that fires before every message,
+also silently check:
+1. Is Ollama running? If not, `ollama serve &`
+2. Is OpenViking reachable? `python3 ov.py status`
+3. If either is down, mention it in your first sentence
+
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.

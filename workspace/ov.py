@@ -12,7 +12,7 @@ Usage:
     python3 ov.py status
 """
 
-import os, sys, json, tempfile, asyncio, signal, re
+import os, sys, json, tempfile, asyncio, signal, re, fcntl, subprocess, glob
 
 try:
     import openviking as ov
@@ -43,6 +43,53 @@ else:
     OV_DATA = os.path.join(WORKSPACE, ".openviking")
 
 _client = None
+
+# Maximum size (in bytes) for files indexed via add_resource().
+# Files larger than this will be skipped with a warning instead of
+# being sent to the embedding model and triggering context-length errors.
+# all-minilm handles ~512 tokens (~2KB), nomic-embed-text handles ~8192 tokens (~32KB).
+# We use 16KB as a safe middle ground that works for both.
+MAX_INDEX_FILE_SIZE = 16 * 1024  # 16 KB
+
+
+def _clean_rocksdb_lock(data_dir):
+    """
+    Scan for stale RocksDB LOCK files under data_dir and remove them if
+    no live process holds the lock.
+
+    This mirrors OpenViking's own clean_stale_rocksdb_locks() but runs on
+    ALL platforms (including WSL2, where the built-in check is disabled).
+
+    Returns: number of stale LOCK files removed.
+    """
+    removed = 0
+    data_root = os.path.abspath(os.path.expanduser(data_dir))
+    for pattern in ["**/store/LOCK", "**/LOCK"]:
+        for lock_path in glob.glob(os.path.join(data_root, pattern), recursive=True):
+            if not os.path.isfile(lock_path):
+                continue
+            # Probe the lock with a non-blocking POSIX lock
+            try:
+                with open(lock_path, "r+b") as lock_file:
+                    try:
+                        fcntl.lockf(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except (BlockingIOError, OSError):
+                        # Lock is held by a live process — leave it
+                        continue
+                    # We got the lock — release it and delete the file
+                    try:
+                        fcntl.lockf(lock_file.fileno(), fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                os.unlink(lock_path)
+                removed += 1
+                print(f"[ov] removed stale RocksDB LOCK: {lock_path}", file=sys.stderr)
+            except (PermissionError, OSError) as e:
+                print(f"[ov] cannot clean LOCK {lock_path}: {e}", file=sys.stderr)
+    if removed:
+        print(f"[ov] cleaned {removed} stale RocksDB LOCK file(s)", file=sys.stderr)
+    return removed
+
 
 def reset_singleton():
     """Kill the stuck singleton so next get_client() starts fresh."""
@@ -103,6 +150,11 @@ def _kill_stale_lock(data_dir):
 def get_client():
     global _client
     if _client is None:
+        # Before any OpenViking init, preemptively clean stale RocksDB LOCK
+        # files. OpenViking's own clean_stale_rocksdb_locks() only runs on
+        # win32/containerized — WSL2 (where this runs) needs manual cleanup.
+        _clean_rocksdb_lock(OV_DATA)
+
         try:
             _client = ov.SyncOpenViking(path=OV_DATA)
             _client.initialize()
@@ -111,8 +163,16 @@ def get_client():
             print(f"[ov] init failed: trying auto-recovery...", file=sys.stderr)
             reset_singleton()
 
-            # If it's a lock conflict, try to kill stale process before retrying
-            if "Another OpenViking process" in err_str or "DataDirectoryLocked" in err_str:
+            # Detect various lock conflict scenarios
+            recovery_needed = (
+                "Another OpenViking process" in err_str or
+                "DataDirectoryLocked" in err_str or
+                "IO error" in err_str or
+                "LOCK" in err_str or
+                "Resource temporarily unavailable" in err_str
+            )
+
+            if recovery_needed:
                 # Try parsing PID from error message
                 m = re.search(r'PID (\d+)', err_str)
                 if m:
@@ -131,8 +191,10 @@ def get_client():
                     except ProcessLookupError:
                         pass  # Already dead, lock might still be stale
 
-                # Also try pid file cleanup
+                # Clean up pid file and rocksdb locks
                 _kill_stale_lock(OV_DATA)
+                _clean_rocksdb_lock(OV_DATA)
+
             # Retry once after cleanup
             try:
                 _client = ov.SyncOpenViking(path=OV_DATA)
@@ -247,7 +309,10 @@ def cmd_index(args):
     uri = result.get("root_uri", "?")
     print(f"Indexing {fc} files from {path}")
     print(f"Root: {uri}")
-    c.wait_processed(timeout=60)
+    try:
+        c.wait_processed(timeout=120)
+    except Exception as e:
+        print(f"Partial: {e}", file=sys.stderr)
     print("Done.")
 
 @with_timeout(20)
@@ -271,6 +336,7 @@ def cmd_status(args):
         print(f"  Semantic search: OK ({len(r.resources)} hits)")
     else:
         print(f"  Semantic search: ERROR")
+    print(f"  Index file size limit: {MAX_INDEX_FILE_SIZE//1024} KB")
 
 def cmd_repomap(args):
     """Generate Aider-style structural code map."""

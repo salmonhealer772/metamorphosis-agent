@@ -27,7 +27,16 @@ Scan `./.openclaw/workspace/memory/` for daily logs older than 30 days.
 If any are found, the agent should evaluate whether to summarize them.
 Never delete without consciously choosing to. See AGENTS.md forgetting rules.
 
-## 3. Startup
+### 4. Memory Dump (every heartbeat)
+
+Batch-store recent conversation context into OpenViking:
+1. Run `python3 ov.py store "<session summary — key decisions, new facts, discoveries>"`
+2. Run `python3 ov.py index` to refresh the vector index
+3. Check `python3 ov.py status` and report any errors
+
+Target: at least one memory entry per active session hour.
+
+## 5. Startup
 
 On session startup, read `./.openclaw/health-state.json`.
 If any service is marked "down", mention it in your first message.
