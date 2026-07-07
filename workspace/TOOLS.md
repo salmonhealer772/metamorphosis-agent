@@ -79,18 +79,10 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
-## OpenViking (Vector Memory)
+## Mem0 (Memory Plugin)
+Mem0 is installed as an OpenClaw plugin. All memory operations are automatic.
+- `openclaw mem0 status` — health check
+- `openclaw mem0 search "query"` — search memories
+- `openclaw mem0 list` — list all memories
 
-- **Config:** `.openviking/ov.conf` (local to install dir)
-- **Server:** Ollama (http://127.0.0.1:11434) — auto-starts on login via `~/.profile`
-- **Model:** all-minilm (for embeddings)
-- **CLI:** `ov.py` (on PATH — symlinked to `~/.local/bin/ov.py`)
-- **Usage:** `ov.py find "query"` / `ov.py store "fact"` / `ov.py status`
 
----
-
-## RepoMap (Codebase Understanding)
-
-- **Location:** `.openclaw/tools/repomap` (local to install dir)
-- **Usage:** `repomap <directory> [map_tokens]`
-- **Parses:** Python, TypeScript, JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more

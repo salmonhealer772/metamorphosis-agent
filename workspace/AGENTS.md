@@ -6,75 +6,22 @@ This folder is home. Treat it that way.
 
 If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
 
-## Session Startup
-
-The auto-capture hook writes every conversation turn to `memory/YYYY-MM-DD.md`.
-On every session start, you MUST proactively load that context — don't wait
-for the runtime to inject it.
-
-**Always run these on startup, before your first response:**
-
-1. **Check storage health** — read `.openclaw/workspace/.openviking/.store-health`:
-   - If file is missing or `ok: false` → say "⚠️ Memory storage isn't working — I'm running in fallback mode."
-   - If file exists but `last_successful` is more than 5 minutes ago → say "⚠️ Memory storage may have stopped working — last successful write was [time]."
-   - If file looks healthy → continue silently.
-
-2. Read today's daily log: `python3 ov.py read memory/$(date +%Y-%m-%d).md`
-   (or `cat .openclaw/workspace/memory/$(date +%Y-%m-%d).md`)
-   This loads everything the hook has captured today.
-
-3. Semantic search for context:
-   `python3 ov.py find "<context from user's first message>"`
-   This pulls relevant past memories across sessions.
-
-4. Read `./.openclaw/health-state.json` and report any "down" services.
-
-**The runtime may also inject startup files** (`AGENTS.md`, `SOUL.md`,
-`USER.md`, recent daily logs, `MEMORY.md`). Use those if present, but
-ALWAYS run the steps above regardless — the hook writes to disk, and
-you are responsible for reading from it.
-
-## Code Comprehension
-
-### 🗺️ RepoMap — Instant Codebase Understanding
-
-A tool at `.openclaw/tools/repomap` generates Aider-style structural maps of any codebase using tree-sitter AST parsing + PageRank ranking.
-
-**Auto-trigger rule:** When anyone mentions a codebase, repository, project, code file, or asks about code structure — run `repomap <directory>` and read the result before answering. This gives you the class/function/type structure of the code.
-
-**Usage:** `.openclaw/tools/repomap <directory> [map_tokens]`
-
-**Examples:**
-- User says "look at this project" → `repomap /path/to/project`
-- User mentions a file → `repomap /path/to/dir` then read the file
-- User asks what something does → `repomap .` on the relevant directory first
-
-Works with any git repo. Scans Python, TypeScript, JavaScript, Go, Rust, Java, C++, and more via tree-sitter.
-
 ## Memory
+Mem0 handles all memory automatically.
+On startup, check `openclaw mem0 status` — if unhealthy, warn the user.
 
-### 🧠 Memory Architecture
+## ## Memory
 
-Two layers work together:
+### 🧠 Memory
 
-1. **Auto-Capture Hook** (new) — automatically writes every conversation turn
-   to `memory/YYYY-MM-DD.md` via the gateway. No agent involvement needed.
-   The hook fires on `message:received` and `message:sent`, appending `**User**`
-   and `**Agent**` entries with UTC timestamps.
+Mem0 handles all memory automatically at the system level:
 
-2. **OpenViking** (semantic search) — `ov.py` indexes the daily log files
-   for cross-session recall. Run `python3 ov.py find "query"` when you need
-   to search past conversations by meaning, not just date.
-
-### Memory Workflow
-
-| Action | How it happens |
-|--------|---------------|
-| **Store** every turn | Hook auto-appends to `memory/YYYY-MM-DD.md` |
-| **Recall** at startup | YOU read today's daily log + `ov.py find` (see Session Startup) |
-| **Recall** mid-conversation | `python3 ov.py find "what we decided about X"` |
-| **Index** new files | `python3 ov.py index <path>` |
-| **Explicit store** (rare) | `python3 ov.py store "fact"` — only for things outside conversation |
+- **Auto-capture:** Every conversation turn (user + agent) is stored in Mem0's
+  vector database. The agent never knows it happened.
+- **Auto-recall:** Before every turn, relevant memories from past conversations
+  are injected into the agent's context. The agent never has to search.
+- **Search manually:** `openclaw mem0 search "query"` if you need to verify
+  what's stored.
 
 ### MEMORY.md - Your Long-Term Memory
 
@@ -308,37 +255,6 @@ Periodically (every few days), use a heartbeat to:
 Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
-
-## 🧠 Memory Reflex — Auto-OpenViking
-
-This agent uses OpenViking for persistent cross-session memory.
-Vector storage is at `.openviking/` within the workspace.
-The **auto-capture hook** handles writing every turn to the daily log.
-Your job is to read it.
-
-### Startup Sequence (every session)
-
-Before your first response, silently run:
-0. **Check `.openviking/.store-health`** — if stale (>5 min) or missing,
-   warn the user: "⚠️ Memory storage issue: OpenViking hasn't stored any
-   messages since [time]. Falling back to daily log only."
-1. `python3 ov.py read memory/$(date +%Y-%m-%d).md` — load today's captured context
-2. `python3 ov.py find "<context from user's first message>"` — load past memories
-3. `python3 ov.py status` — verify OpenViking is alive
-
-### On-Going Recall (during conversation)
-
-The hook writes every turn, but you must actively search memory when context
-might be stale — after compaction, after a long gap, or when the user asks
-something that suggests they've told you before.
-
-### Pain Neuron Companion
-
-Alongside the `~/.openclaw/pain-signal.json` check that fires before every message,
-also silently check:
-1. Is Ollama running? If not, `ollama serve &`
-2. Is OpenViking reachable? `python3 ov.py status`
-3. If either is down, mention it in your first sentence
 
 ## Make It Yours
 

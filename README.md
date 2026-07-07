@@ -11,7 +11,7 @@ account, no bullshit. Ships working out of the box.
 | Claude Code | metamorphosis-agent |
 |---|---|
 | Cloud-dependent | **Fully local** (except LLM API call) |
-| No cross-session memory | **Vector memory via OpenViking** |
+| No cross-session memory | **Auto memory via Mem0** |
 | Can't touch its own config | **Self-editing** — reads and rewrites its own source |
 | Account required | **Zero accounts** — bring your own API key |
 | CLI only | **Multi-channel** — webchat, Signal, Discord, terminal |
@@ -80,10 +80,9 @@ my-agent/
 ├── README.md
 ├── .local/bin/         # node, npm, openclaw (local binaries)
 ├── .openclaw/          # OpenClaw config, workspace, tools, health state
-│   ├── workspace/      # Agent workspace (AGENTS.md, SOUL.md, ov.py, memory)
+│   ├── workspace/      # Agent workspace (AGENTS.md, SOUL.md, memory)
 │   ├── tools/          # repomap and other tools
 │   └── health-state.json
-├── .openviking/        # OpenViking vector store config + data
 ├── scripts/            # Helper scripts
 ├── workspace/          # Source workspace template
 ├── diagnostics/
@@ -105,15 +104,12 @@ workspace/                    (inside .openclaw/)
 ├── TOOLS.md                  # Local infra — OpenViking, RepoMap
 ├── HEARTBEAT.md              # Periodic health checks, memory maintenance tasks
 ├── MEMORY.md                 # Curated long-term memory index (agent-maintained)
-├── ov.py                     # OpenViking CLI — semantic vector memory
 ├── memory/                   # Daily session logs
-└── .openviking/              # Vector store data
 
 scripts/
 ├── repomap                   # Codebase understanding (tree-sitter + PageRank)
 ├── setup-warp-oss.sh         # Warp OSS builder (remote)
 ├── build-warp.sh             # Warp OSS builder (local)
-└── verify-openviking.sh      # Memory health check
 
 diagnostics/
 └── agent-diagnostic-prompt.md  # Full health check prompt
@@ -134,27 +130,19 @@ each. It reads health-state.json and reports actual service statuses — this is
 
 ## Memory — cross-session, persistent
 
-Vector database powered by **Ollama + all-minilm**. Install flow:
+Memory powered by the **@mem0/openclaw-mem0** plugin. Fully local with Ollama:
 
 1. Ollama installed without sudo
 2. Service confirmed running BEFORE model is pulled (fixes silent failure)
-3. `all-minilm` model pulled with automatic retry if first attempt fails
-4. `ov.py` config written, storage directory created
 5. OpenViking import + config verified
-
-`ov.py` is on PATH after setup (symlinked to `.local/bin/ov.py`):
 
 ```bash
 cd /path/to/install/dir
-. .local/bin/ov.py find "what were we working on last week"
-. .local/bin/ov.py store "decided to use Postgres for the new project"
-. .local/bin/ov.py status
 ```
 
 Or, from inside the install dir via the full path:
 
 ```bash
-./.local/bin/ov.py find "query"
 ```
 
 ## Behavioral guardrails

@@ -9,12 +9,10 @@ Run a complete diagnostic of all my local services and tools. Test every single 
 ## Checks
 
 ### 1. Python dependencies
-- `python3 -c "import openviking; print(openviking.__version__)"` — should print version
 
-### 2. OpenViking (ov.py)
-- `python3 ov.py status` — should show "Semantic search: OK"
-- `python3 ov.py store "diagnostic test entry $(date)"` — should store without timeout
-- `python3 ov.py find "diagnostic"` — should return at least 1 result
+### 2. Mem0 Memory Plugin
+- `openclaw mem0 status` — should report healthy
+- `openclaw mem0 search "diagnostic"` — should return results
 
 ### 3. RepoMap tool
 - `ls -la .openclaw/tools/repomap` — file should exist and be executable
@@ -24,7 +22,6 @@ Run a complete diagnostic of all my local services and tools. Test every single 
 - `curl -s http://127.0.0.1:11434/api/tags | python3 -c "import sys,json; print([m['name'] for m in json.load(sys.stdin)['models']])"` — should include all-minilm
 
 ### 5. File structure
-- `ls -d .openclaw/workspace/.openviking/vectordb 2>/dev/null && echo "EXISTS"` — should exist
 - `ls .openclaw/tools/` — should list repomap
 
 ### 6. Git
