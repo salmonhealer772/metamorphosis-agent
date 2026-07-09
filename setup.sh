@@ -653,6 +653,9 @@ plugins['slots'] = {'memory': 'openclaw-mem0'}
 plugin_entries = plugins.setdefault('entries', {})
 plugin_entries['openclaw-mem0'] = {
     'enabled': True,
+    'hooks': {
+        'allowConversationAccess': True
+    },
     'config': {
         'mode': 'open-source',
         'userId': '$mem0_user_id',
