@@ -564,6 +564,10 @@ function install_mem0_plugin() {
 
     if $mem0_installed; then
         pretty_print "Mem0 plugin installed" "${fg_green}"
+        # Install Mem0's OSS dependency (ollama npm package for embeddings)
+        pretty_print "  Installing Mem0 OSS dependency (ollama npm)…" "${fg_cyan}"
+        cd "$INSTALL_DIR/.openclaw/npm" 2>/dev/null && npm install ollama 2>&1 | tail -2 || true
+        cd "$orig_cwd"
     else
         pretty_print "⚠  Mem0 plugin install FAILED" "${fg_red}"
         pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
