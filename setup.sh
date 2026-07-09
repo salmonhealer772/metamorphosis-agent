@@ -607,22 +607,24 @@ function configure_mem0() {
     local mem0_llm_key=""
     local mem0_llm_baseurl=""
     case "$PROVIDER_IDX" in
-        0) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";           mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
-        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key='${DEEPSEEK_API_KEY}'; mem0_llm_baseurl="https://api.deepseek.com";;
-        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key='${OPENAI_API_KEY}'; mem0_llm_baseurl="https://api.openai.com/v1";;
-        3) mem0_llm_provider="anthropic";   mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_key="\${ANTHROPIC_API_KEY}"; mem0_llm_baseurl="";;
-        4) mem0_llm_provider="gemini";      mem0_llm_model="gemini-2.5-flash";    mem0_llm_key="\${GEMINI_API_KEY}"; mem0_llm_baseurl="";;
-        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key='${OPENROUTER_API_KEY}'; mem0_llm_baseurl="https://openrouter.ai/api/v1";;
-        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key='${TOGETHER_API_KEY}'; mem0_llm_baseurl="https://api.together.xyz/v1";;
-        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key='${XAI_API_KEY}'; mem0_llm_baseurl="https://api.x.ai/v1";;
-        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key='${MISTRAL_API_KEY}'; mem0_llm_baseurl="https://api.mistral.ai/v1";;
-        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key='${FIREWORKS_API_KEY}'; mem0_llm_baseurl="https://api.fireworks.ai/inference/v1";;
-        *) mem0_llm_provider="openai";      mem0_llm_model="qwen2.5:7b";          mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
+        0) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";    mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
+        1) mem0_llm_provider="deepseek";  mem0_llm_model="deepseek-chat"; mem0_llm_baseurl="https://api.deepseek.com";;
+        2) mem0_llm_provider="openai";    mem0_llm_model="gpt-5-mini";    mem0_llm_baseurl="https://api.openai.com/v1";;
+        3) mem0_llm_provider="anthropic"; mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_baseurl="";;
+        4) mem0_llm_provider="gemini";    mem0_llm_model="gemini-2.5-flash"; mem0_llm_baseurl="";;
+        5) mem0_llm_provider="openrouter";mem0_llm_model="openrouter/auto"; mem0_llm_baseurl="https://openrouter.ai/api/v1";;
+        6) mem0_llm_provider="together";  mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_baseurl="https://api.together.xyz/v1";;
+        7) mem0_llm_provider="xai";       mem0_llm_model="grok-2";         mem0_llm_baseurl="https://api.x.ai/v1";;
+        8) mem0_llm_provider="mistral";   mem0_llm_model="mistral-large-latest"; mem0_llm_baseurl="https://api.mistral.ai/v1";;
+        9) mem0_llm_provider="fireworks"; mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_baseurl="https://api.fireworks.ai/inference/v1";;
+        *) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";    mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
     esac
 
-    # For local Ollama (provider ID 0), the case statement above already sets
-    # provider to 'openai' with baseURL pointing to Ollama's /v1 endpoint.
-    # This handles the ollama npm package compatibility issue with Ollama v0.24.0.
+    # For API providers (1-9), use the actual API key collected during gather_identity
+    # For local Ollama (0), the key stays empty
+    if [[ "$PROVIDER_IDX" != "0" && -n "$API_KEY" && "$API_KEY" != "***" ]]; then
+        mem0_llm_key="$API_KEY"
+    fi
 
     local db_path="$INSTALL_DIR/.mem0/vector_store.db"
 
@@ -921,6 +923,39 @@ function main() {
     init_health_state
     write_run_script
     cleanup_portable
+
+    # Start the gateway so Mem0 plugin hooks are active
+    echo ""
+    pretty_print "Starting gateway…" "${fg_cyan}"
+    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
+    export OPENCLAW_DIR="$WORKSPACE_TARGET"
+    # Export the API key for the provider the user chose so Mem0 can use it
+    case "$PROVIDER_IDX" in
+        1) export DEEPSEEK_API_KEY="$API_KEY";;
+        2) export OPENAI_API_KEY="$API_KEY";;
+        3) export ANTHROPIC_API_KEY="$API_KEY";;
+        4) export GEMINI_API_KEY="$API_KEY";;
+        5) export OPENROUTER_API_KEY="$API_KEY";;
+        6) export TOGETHER_API_KEY="$API_KEY";;
+        7) export XAI_API_KEY="$API_KEY";;
+        8) export MISTRAL_API_KEY="$API_KEY";;
+        9) export FIREWORKS_API_KEY="$API_KEY";;
+    esac
+    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
+    if [[ ! -f "$oc_bin" ]]; then
+        oc_bin="$(command -v openclaw || true)"
+    fi
+    if [[ -n "$oc_bin" ]]; then
+        HOME=/tmp "$oc_bin" gateway > /dev/null 2>&1 &
+        GATEWAY_PID=$!
+        sleep 3
+        if kill -0 "$GATEWAY_PID" 2>/dev/null; then
+            pretty_print "Gateway running (PID $GATEWAY_PID)" "${fg_green}"
+        else
+            pretty_print "Gateway start attempted — if it failed, run manually:" "${fg_yellow}"
+            pretty_print "  cd $INSTALL_DIR && ./run.sh gateway" "${fg_cyan}"
+        fi
+    fi
 
     # Mark setup as complete
     touch "$INSTALL_DIR/.setup-complete"
