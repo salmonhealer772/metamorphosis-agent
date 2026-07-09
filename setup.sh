@@ -608,15 +608,15 @@ function configure_mem0() {
     local mem0_llm_baseurl=""
     case "$PROVIDER_IDX" in
         0) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";           mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
-        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key="\${DEEPSEEK_API_KEY}"; mem0_llm_baseurl="";;
-        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key="\${OPENAI_API_KEY}"; mem0_llm_baseurl="";;
+        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key="${DEEPSEEK_API_KEY}"; mem0_llm_baseurl="https://api.deepseek.com";;
+        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key="${OPENAI_API_KEY}"; mem0_llm_baseurl="https://api.openai.com/v1";;
         3) mem0_llm_provider="anthropic";   mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_key="\${ANTHROPIC_API_KEY}"; mem0_llm_baseurl="";;
         4) mem0_llm_provider="gemini";      mem0_llm_model="gemini-2.5-flash";    mem0_llm_key="\${GEMINI_API_KEY}"; mem0_llm_baseurl="";;
-        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key="\${OPENROUTER_API_KEY}"; mem0_llm_baseurl="";;
-        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key="\${TOGETHER_API_KEY}"; mem0_llm_baseurl="";;
-        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key="\${XAI_API_KEY}"; mem0_llm_baseurl="";;
-        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key="\${MISTRAL_API_KEY}"; mem0_llm_baseurl="";;
-        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key="\${FIREWORKS_API_KEY}"; mem0_llm_baseurl="";;
+        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key="${OPENROUTER_API_KEY}"; mem0_llm_baseurl="https://openrouter.ai/api/v1";;
+        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key="${TOGETHER_API_KEY}"; mem0_llm_baseurl="https://api.together.xyz/v1";;
+        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key="${XAI_API_KEY}"; mem0_llm_baseurl="https://api.x.ai/v1";;
+        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key="${MISTRAL_API_KEY}"; mem0_llm_baseurl="https://api.mistral.ai/v1";;
+        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key="${FIREWORKS_API_KEY}"; mem0_llm_baseurl="https://api.fireworks.ai/inference/v1";;
         *) mem0_llm_provider="openai";      mem0_llm_model="qwen2.5:7b";          mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
     esac
 
@@ -660,18 +660,6 @@ plugin_entries['openclaw-mem0'] = {
         'autoCapture': True,
         'autoRecall': True,
         'topK': 5,
-        'skills': {
-            'triage': {'enabled': True},
-            'recall': {
-                'enabled': True,
-                'tokenBudget': 1500,
-                'rerank': True,
-                'keywordSearch': True,
-                'identityAlwaysInclude': True
-            },
-            'dream': {'enabled': True},
-            'domain': 'companion'
-        },
         'oss': {
             'embedder': {
                 'provider': 'ollama',
