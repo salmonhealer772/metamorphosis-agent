@@ -569,19 +569,11 @@ function install_mem0_plugin() {
         cd "$INSTALL_DIR/.openclaw/npm" 2>/dev/null && npm install ollama 2>&1 | tail -2 || true
         cd "$orig_cwd"
 
-        # Patch plugin: skills mode blocks auto-capture with early return.
-        # This removes the return so BOTH skills-mode recall AND auto-capture work.
+        # Patch plugin: skills mode has an early return that blocks auto-capture
+        # and recall handlers. Also bump recall timeout for slow extraction.
         local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
         if [[ -f "$plugin_file" ]]; then
-            # The exact JavaScript pattern to patch:
-            #   api.logger.info("...no auto-capture...");
-            #   });
-            #   return;
-            # }
-            # Remove the 'return;' line so agent_end falls through to auto-capture
-            sed -i '/skills-mode agent_end/{n;/);/n;/return;/{d}}' "$plugin_file" 2>/dev/null && \
-                pretty_print "  Plugin patched: auto-capture enabled alongside skills mode" "${fg_cyan}" || \
-                pretty_print "  Plugin patch skipped — unexpected file format" "${fg_yellow}"
+            python3 "$INSTALL_DIR/scripts/patch-mem0-plugin.py" "$plugin_file"
         fi
     else
         pretty_print "⚠  Mem0 plugin install FAILED" "${fg_red}"
