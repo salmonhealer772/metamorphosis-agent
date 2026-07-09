@@ -569,11 +569,19 @@ function install_mem0_plugin() {
         cd "$INSTALL_DIR/.openclaw/npm" 2>/dev/null && npm install ollama 2>&1 | tail -2 || true
         cd "$orig_cwd"
 
-        # Patch recall timeout from 8s to 30s (default too short for Ollama inference)
+        # Patch plugin: skills mode blocks auto-capture with early return.
+        # This removes the return so BOTH skills-mode recall AND auto-capture work.
         local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
         if [[ -f "$plugin_file" ]]; then
-            sed -i 's/RECALL_TIMEOUT_MS = 8e3/RECALL_TIMEOUT_MS = 30e3/' "$plugin_file" 2>/dev/null && \
-                pretty_print "  Recall timeout patched to 30s" "${fg_cyan}"
+            # The exact JavaScript pattern to patch:
+            #   api.logger.info("...no auto-capture...");
+            #   });
+            #   return;
+            # }
+            # Remove the 'return;' line so agent_end falls through to auto-capture
+            sed -i '/skills-mode agent_end/{n;/);/n;/return;/{d}}' "$plugin_file" 2>/dev/null && \
+                pretty_print "  Plugin patched: auto-capture enabled alongside skills mode" "${fg_cyan}" || \
+                pretty_print "  Plugin patch skipped — unexpected file format" "${fg_yellow}"
         fi
     else
         pretty_print "⚠  Mem0 plugin install FAILED" "${fg_red}"
@@ -662,6 +670,19 @@ plugin_entries['openclaw-mem0'] = {
         'autoCapture': True,
         'autoRecall': True,
         'topK': 5,
+        'skills': {
+            'triage': {'enabled': True},
+            'recall': {
+                'enabled': True,
+                'tokenBudget': 1500,
+                'rerank': True,
+                'keywordSearch': True,
+                'identityAlwaysInclude': True,
+                'strategy': 'smart'
+            },
+            'dream': {'enabled': False},
+            'domain': 'companion'
+        },
         'oss': {
             'embedder': {
                 'provider': 'ollama',
