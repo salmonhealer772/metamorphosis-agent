@@ -568,6 +568,13 @@ function install_mem0_plugin() {
         pretty_print "  Installing Mem0 OSS dependency (ollama npm)…" "${fg_cyan}"
         cd "$INSTALL_DIR/.openclaw/npm" 2>/dev/null && npm install ollama 2>&1 | tail -2 || true
         cd "$orig_cwd"
+
+        # Patch recall timeout from 8s to 30s (default too short for Ollama inference)
+        local plugin_file="$INSTALL_DIR/.openclaw/npm/node_modules/@mem0/openclaw-mem0/dist/index.js"
+        if [[ -f "$plugin_file" ]]; then
+            sed -i 's/RECALL_TIMEOUT_MS = 8e3/RECALL_TIMEOUT_MS = 30e3/' "$plugin_file" 2>/dev/null && \
+                pretty_print "  Recall timeout patched to 30s" "${fg_cyan}"
+        fi
     else
         pretty_print "⚠  Mem0 plugin install FAILED" "${fg_red}"
         pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
@@ -591,44 +598,31 @@ function configure_mem0() {
     local rand_suffix="$(tr -dc a-z0-9 < /dev/urandom 2>/dev/null | head -c6 || echo "x$(date +%s | tail -c6)")"
     local mem0_user_id="${AGENT_NAME}-${rand_suffix}"
 
-    # Determine LLM provider from user's choice during gather_identity
+    # Determine LLM provider for Mem0 extraction
+    # IMPORTANT: Use OpenAI-compatible endpoint for Ollama, NOT native ollama npm
+    # The ollama npm package has compatibility issues with Ollama v0.24.0+
+    # The OpenAI-compatible endpoint (/v1/chat/completions) works reliably.
     local mem0_llm_provider=""
     local mem0_llm_model=""
     local mem0_llm_key=""
+    local mem0_llm_baseurl=""
     case "$PROVIDER_IDX" in
-        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key="\${DEEPSEEK_API_KEY}";;
-        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key="\${OPENAI_API_KEY}";;
-        3) mem0_llm_provider="anthropic";   mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_key="\${ANTHROPIC_API_KEY}";;
-        4) mem0_llm_provider="gemini";      mem0_llm_model="gemini-2.5-flash";    mem0_llm_key="\${GEMINI_API_KEY}";;
-        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key="\${OPENROUTER_API_KEY}";;
-        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key="\${TOGETHER_API_KEY}";;
-        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key="\${XAI_API_KEY}";;
-        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key="\${MISTRAL_API_KEY}";;
-        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key="\${FIREWORKS_API_KEY}";;
-        *) mem0_llm_provider="ollama";      mem0_llm_model="qwen2.5:7b";          mem0_llm_key="";;
+        0) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";           mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
+        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key="\${DEEPSEEK_API_KEY}"; mem0_llm_baseurl="";;
+        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key="\${OPENAI_API_KEY}"; mem0_llm_baseurl="";;
+        3) mem0_llm_provider="anthropic";   mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_key="\${ANTHROPIC_API_KEY}"; mem0_llm_baseurl="";;
+        4) mem0_llm_provider="gemini";      mem0_llm_model="gemini-2.5-flash";    mem0_llm_key="\${GEMINI_API_KEY}"; mem0_llm_baseurl="";;
+        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key="\${OPENROUTER_API_KEY}"; mem0_llm_baseurl="";;
+        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key="\${TOGETHER_API_KEY}"; mem0_llm_baseurl="";;
+        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key="\${XAI_API_KEY}"; mem0_llm_baseurl="";;
+        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key="\${MISTRAL_API_KEY}"; mem0_llm_baseurl="";;
+        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key="\${FIREWORKS_API_KEY}"; mem0_llm_baseurl="";;
+        *) mem0_llm_provider="openai";      mem0_llm_model="qwen2.5:7b";          mem0_llm_key=""; mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
     esac
 
-    # If user chose Ollama as their LLM provider, use the same model for Mem0 extraction
-    local chosen_model=""
-    if [[ "$PROVIDER_IDX" -eq 0 || -z "$PROVIDER_IDX" ]]; then
-        mem0_llm_provider="ollama"
-        mem0_llm_model="qwen2.5:7b"
-    else
-        # Try to extract the model from the OpenClaw config
-        chosen_model=$(python3 -c "
-import json
-with open('$config_path') as f:
-    c = json.load(f)
-provider = c.get('providers', {}).get('llm', {})
-print(provider.get('model', ''))
-" 2>/dev/null || true)
-        if [[ -z "$chosen_model" || "$chosen_model" == "None" ]]; then
-            chosen_model="qwen2.5:7b"
-        fi
-        if [[ "$mem0_llm_provider" == "ollama" ]]; then
-            mem0_llm_model="$chosen_model"
-        fi
-    fi
+    # For local Ollama (provider ID 0), the case statement above already sets
+    # provider to 'openai' with baseURL pointing to Ollama's /v1 endpoint.
+    # This handles the ollama npm package compatibility issue with Ollama v0.24.0.
 
     local db_path="$INSTALL_DIR/.mem0/vector_store.db"
 
@@ -691,7 +685,7 @@ plugin_entries['openclaw-mem0'] = {
                 'provider': '$mem0_llm_provider',
                 'config': {
                     'model': '$mem0_llm_model',
-                    'apiKey': '$mem0_llm_key'
+                    'apiKey': '$mem0_llm_key','baseURL': '$mem0_llm_baseurl'
                 }
             }
         }
