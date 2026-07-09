@@ -646,7 +646,7 @@ sm['enabled'] = False
 
 # 2. Configure plugins section
 plugins = config.setdefault('plugins', {})
-plugins['allow'] = ['mem0']
+plugins['allow'] = ['openclaw-mem0']
 plugins['slots'] = {'memory': 'openclaw-mem0'}
 
 # 3. Mem0 plugin entry with full config
