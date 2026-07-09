@@ -539,20 +539,24 @@ function install_mem0_plugin() {
         return
     fi
 
+    # Ensure OPENCLAW_STATE_DIR points to the test/install dir, not ~/.openclaw
+    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
+    export OPENCLAW_DIR="$WORKSPACE_TARGET"
+
     local mem0_installed=false
 
     # Primary install path
     pretty_print "  Installing via openclaw plugins install…" "${fg_cyan}"
-    if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
+    if HOME=/tmp "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
         mem0_installed=true
     fi
 
     # Fallback: npm install -g, then register with OpenClaw
     if ! $mem0_installed; then
         pretty_print "  Primary install failed — trying npm fallback…" "${fg_yellow}"
-        if npm install -g @mem0/openclaw-mem0 2>&1; then
+        if HOME=/tmp npm install -g @mem0/openclaw-mem0 2>&1; then
             pretty_print "  Package downloaded — registering with OpenClaw…" "${fg_cyan}"
-            if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
+            if HOME=/tmp "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
                 mem0_installed=true
             fi
         fi
