@@ -352,6 +352,7 @@ function gather_identity() {
 
     echo ""
     pretty_print "→ LLM provider" "${ta_bold}"
+    echo "  0) Ollama (Local — no API key needed)"
     echo "  1) DeepSeek"
     echo "  2) OpenAI"
     echo "  3) Anthropic"
@@ -361,12 +362,13 @@ function gather_identity() {
     echo "  7) xAI (Grok)"
     echo "  8) Mistral"
     echo "  9) Fireworks"
-    read -rp "  Pick (1-9): " PROVIDER_IDX
+    read -rp "  Pick (0-9): " PROVIDER_IDX
 
     AUTH_CHOICE=""
     CLI_FLAG=""
     local env_key=""
     case "$PROVIDER_IDX" in
+        0) AUTH_CHOICE="";            CLI_FLAG="";               env_key="";;
         1) AUTH_CHOICE="deepseek-api-key";    CLI_FLAG="--deepseek-api-key";    env_key="DEEPSEEK_API_KEY";;
         2) AUTH_CHOICE="openai-api-key";      CLI_FLAG="--openai-api-key";      env_key="OPENAI_API_KEY";;
         3) AUTH_CHOICE="apiKey";              CLI_FLAG="--anthropic-api-key";   env_key="ANTHROPIC_API_KEY";;
@@ -375,7 +377,7 @@ function gather_identity() {
         6) AUTH_CHOICE="together-api-key";    CLI_FLAG="--together-api-key";    env_key="TOGETHER_API_KEY";;
         7) AUTH_CHOICE="xai-api-key";         CLI_FLAG="--xai-api-key";         env_key="XAI_API_KEY";;
         8) AUTH_CHOICE="mistral-api-key";     CLI_FLAG="--mistral-api-key";     env_key="MISTRAL_API_KEY";;
-        9) AUTH_CHOICE="fireworks-api-key";   CLI_FLAG="--fireworks-api-key";   env_key="FIREWORKS_API_KEY";;
+        9) AUTH_CHOICE="fireworks-api-key";   CLI_FLAG="--fireworks-api-key";     env_key="FIREWORKS_API_KEY";;
         *) pretty_print "Invalid choice" "${fg_red}"; exit 1;;
     esac
 
@@ -397,7 +399,7 @@ function gather_identity() {
         fi
     fi
 
-    if [[ -z "$API_KEY" ]]; then
+    if [[ "$PROVIDER_IDX" != "0" ]] && [[ -z "$API_KEY" ]]; then
         read -rp "  Paste your API key: " API_KEY
     fi
     echo ""
@@ -733,8 +735,13 @@ function bootstrap_openclaw() {
         return
     fi
     HOME="$oc_home" "$oc_bin" onboard --non-interactive --flow quickstart --accept-risk --skip-health 2>&1 | tail -3 || true
-    HOME="$oc_home" "$oc_bin" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
-        pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
+    # For Ollama (local), skip the auth step
+    if [[ -n "$AUTH_CHOICE" ]]; then
+        HOME="$oc_home" "$oc_bin" onboard --non-interactive --accept-risk --auth-choice "$AUTH_CHOICE" "$CLI_FLAG" "$API_KEY" 2>&1 | tail -2 || \
+            pretty_print "Provider setup had issues — run 'openclaw onboard' manually" "${fg_yellow}"
+    else
+        pretty_print "Skipping provider auth (local Ollama)" "${fg_cyan}"
+    fi
     # Clean up temp home
     rm -rf "$oc_home" 2>/dev/null || true
     # Move any stray ~/.openclaw/ into project dir
