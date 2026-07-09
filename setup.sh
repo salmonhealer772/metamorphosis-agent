@@ -516,6 +516,13 @@ function setup_ollama() {
                     pretty_print "Pull failed — run ollama pull nomic-embed-text later" "${fg_yellow}"
                 fi
             fi
+            # Pull extraction model for Mem0 (small, fast)
+            pretty_print "Pulling extraction model (llama3.2:3b)…" "${fg_cyan}"
+            if ollama pull llama3.2:3b 2>&1; then
+                pretty_print "Extraction model ready"
+            else
+                pretty_print "Extraction model pull failed — run manually later" "${fg_yellow}"
+            fi
         else
             pretty_print "Ollama not reachable" "${fg_yellow}"
         fi
@@ -599,32 +606,12 @@ function configure_mem0() {
     local mem0_user_id="${AGENT_NAME}-${rand_suffix}"
 
     # Determine LLM provider for Mem0 extraction
-    # IMPORTANT: Use OpenAI-compatible endpoint for Ollama, NOT native ollama npm
-    # The ollama npm package has compatibility issues with Ollama v0.24.0+
-    # The OpenAI-compatible endpoint (/v1/chat/completions) works reliably.
-    local mem0_llm_provider=""
-    local mem0_llm_model=""
+    # Mem0 extraction ALWAYS uses local Ollama for speed (~5s vs 60s+ for API)
+    # This decouples memory extraction from the user's conversation provider
+    local mem0_llm_provider="openai"
+    local mem0_llm_model="llama3.2:3b"
     local mem0_llm_key=""
-    local mem0_llm_baseurl=""
-    case "$PROVIDER_IDX" in
-        0) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";    mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
-        1) mem0_llm_provider="deepseek";  mem0_llm_model="deepseek-chat"; mem0_llm_baseurl="https://api.deepseek.com";;
-        2) mem0_llm_provider="openai";    mem0_llm_model="gpt-5-mini";    mem0_llm_baseurl="https://api.openai.com/v1";;
-        3) mem0_llm_provider="anthropic"; mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_baseurl="";;
-        4) mem0_llm_provider="gemini";    mem0_llm_model="gemini-2.5-flash"; mem0_llm_baseurl="";;
-        5) mem0_llm_provider="openrouter";mem0_llm_model="openrouter/auto"; mem0_llm_baseurl="https://openrouter.ai/api/v1";;
-        6) mem0_llm_provider="together";  mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_baseurl="https://api.together.xyz/v1";;
-        7) mem0_llm_provider="xai";       mem0_llm_model="grok-2";         mem0_llm_baseurl="https://api.x.ai/v1";;
-        8) mem0_llm_provider="mistral";   mem0_llm_model="mistral-large-latest"; mem0_llm_baseurl="https://api.mistral.ai/v1";;
-        9) mem0_llm_provider="fireworks"; mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_baseurl="https://api.fireworks.ai/inference/v1";;
-        *) mem0_llm_provider="openai";    mem0_llm_model="qwen2.5:7b";    mem0_llm_baseurl="http://127.0.0.1:11434/v1";;
-    esac
-
-    # For API providers (1-9), use the actual API key collected during gather_identity
-    # For local Ollama (0), the key stays empty
-    if [[ "$PROVIDER_IDX" != "0" && -n "$API_KEY" && "$API_KEY" != "***" ]]; then
-        mem0_llm_key="$API_KEY"
-    fi
+    local mem0_llm_baseurl="http://127.0.0.1:11434/v1"
 
     local db_path="$INSTALL_DIR/.mem0/vector_store.db"
 
