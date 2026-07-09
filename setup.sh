@@ -946,6 +946,7 @@ function main() {
     cleanup_portable
 
     # Start the gateway so Mem0 plugin hooks are active
+    # The gateway MUST be running for auto-capture and auto-recall to work
     echo ""
     pretty_print "Starting gateway…" "${fg_cyan}"
     export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
@@ -966,16 +967,43 @@ function main() {
     if [[ ! -f "$oc_bin" ]]; then
         oc_bin="$(command -v openclaw || true)"
     fi
+    local gw_port=18789
+    GATEWAY_OK=false
     if [[ -n "$oc_bin" ]]; then
-        HOME=/tmp "$oc_bin" gateway > /dev/null 2>&1 &
+        "$oc_bin" gateway > /tmp/setup-gateway.log 2>&1 &
         GATEWAY_PID=$!
-        sleep 3
-        if kill -0 "$GATEWAY_PID" 2>/dev/null; then
-            pretty_print "Gateway running (PID $GATEWAY_PID)" "${fg_green}"
+        for i in 1 2 3 4 5; do
+            sleep 2
+            if curl -sf "http://127.0.0.1:$gw_port/__openclaw__/api/chat" >/dev/null 2>&1; then
+                GATEWAY_OK=true
+                break
+            fi
+        done
+        if $GATEWAY_OK; then
+            pretty_print "Gateway running on port $gw_port (PID $GATEWAY_PID)" "${fg_green}"
         else
-            pretty_print "Gateway start attempted — if it failed, run manually:" "${fg_yellow}"
-            pretty_print "  cd $INSTALL_DIR && ./run.sh gateway" "${fg_cyan}"
+            if kill -0 "$GATEWAY_PID" 2>/dev/null; then
+                kill "$GATEWAY_PID" 2>/dev/null || true
+            fi
+            pretty_print "⚠ Gateway failed to start" "${fg_red}"
+            cat /tmp/setup-gateway.log 2>/dev/null | grep -i "error\|fail\|in use\|EADDR" | tail -3
         fi
+    fi
+    rm -f /tmp/setup-gateway.log
+
+    if ! $GATEWAY_OK; then
+        echo ""
+        pretty_print "To use the agent with automatic memory, start the gateway:" "${fg_yellow}"
+        pretty_print "  cd $INSTALL_DIR" "${fg_cyan}"
+        pretty_print "  # Set your API key as an environment variable" "${fg_cyan}"
+        pretty_print "  export DEEPSEEK_API_KEY=your_key_here" "${fg_cyan}"
+        pretty_print "  ./run.sh gateway" "${fg_cyan}"
+        pretty_print ""
+        pretty_print "Then use the agent:" "${fg_yellow}"
+        pretty_print "  cd $INSTALL_DIR" "${fg_cyan}"
+        pretty_print "  export DEEPSEEK_API_KEY=your_key_here" "${fg_cyan}"
+        pretty_print "  ./run.sh agent --agent main --message \"I have a red car\"" "${fg_cyan}"
+        echo ""
     fi
 
     # Mark setup as complete
