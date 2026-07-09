@@ -236,145 +236,6 @@ function detect_distro() {
     fi
 }
 
-# ---- DESC: Bootstrap pip (handles Ubuntu 24.04 PEP 668) ---------------------
-function bootstrap_pip() {
-    pretty_print "Python Package Management" "${fg_cyan}"
-
-    local ov_venv="$INSTALL_DIR/.openclaw/venv"
-
-    # Always try to create a venv first — isolates all pip packages and
-    # sidesteps PEP 668 (externally-managed-environment) completely.
-    pretty_print "Creating isolated Python venv…" "${fg_cyan}"
-    if python3 -m venv "$ov_venv" 2>&1; then
-        PIP_CMD="$ov_venv/bin/pip"
-        pretty_print "Created Python venv at $ov_venv"
-        return
-    fi
-    pretty_print "python3 -m venv failed — trying alternatives…" "${fg_yellow}"
-
-    # If pip is not available at all, download it
-    PIP_CMD=""
-    if ! python3 -m pip --version >/dev/null 2>&1; then
-        pretty_print "pip not found — installing via pip.pyz…" "${fg_cyan}"
-        if ! curl -sL --connect-timeout 10 https://bootstrap.pypa.io/pip/pip.pyz -o /tmp/pip.pyz 2>/dev/null; then
-            pretty_print "pip.pyz download failed (network issue)" "${fg_yellow}"
-        fi
-        python3 /tmp/pip.pyz install --break-system-packages pip -q 2>&1 || true
-    fi
-
-    # Try virtualenv as fallback (can create venvs without the venv module)
-    if ! python3 -c "import virtualenv" 2>/dev/null; then
-        python3 -m pip install --break-system-packages virtualenv -q 2>/dev/null || true
-    fi
-    if python3 -c "import virtualenv" 2>/dev/null; then
-        python3 -m virtualenv "$ov_venv" 2>&1 && {
-            PIP_CMD="$ov_venv/bin/pip"
-            pretty_print "Created Python venv via virtualenv"
-            return
-        }
-    fi
-
-    # Last resort: use system pip with --target+--break-system-packages
-    if python3 -m pip --version >/dev/null 2>&1; then
-        PIP_CMD="python3 -m pip"
-        pretty_print "Falling back to system pip (will use --break-system-packages)" "${fg_yellow}"
-        return
-    fi
-
-    pretty_print "No pip available — install pip manually" "${fg_red}"
-    exit 1
-}
-
-# ---- DESC: Set up PIP_INSTALL helper variable --------------------------------
-function setup_pip_install() {
-    PIP_INSTALL="$PIP_CMD install"
-    # When using system pip (no venv), redirect to local target dir
-    if ! echo "$PIP_CMD" | grep -q "/venv/bin/pip"; then
-        local py_libs="$INSTALL_DIR/.openclaw/py-libs"
-        PIP_INSTALL="$PIP_CMD install --target=$py_libs --break-system-packages"
-        # Add target to Python path so imports work
-        export PYTHONPATH="$py_libs:${PYTHONPATH:-}"
-    fi
-}
-
-# ---- DESC: Install openviking Python package ---------------------------------
-function install_openviking_pkg() {
-    pretty_print "OpenViking (Vector Memory)" "${fg_cyan}"
-    
-    # Ensure data dirs exist even if install fails (configs come later)
-    mkdir -p "$WORKSPACE_TARGET/.openviking"
-    
-    if $OV_PYTHON -c "import openviking" 2>/dev/null; then
-        pretty_print "openviking $($OV_PYTHON -c 'import openviking; print(openviking.__version__)' 2>/dev/null) already installed"
-        return
-    fi
-
-    pretty_print "Installing openviking (50+ dependencies, may take a minute)…" "${fg_cyan}"
-
-    # Try 5 strategies in order. First one that succeeds wins.
-    local _installed=false
-    local _pip_base="$PIP_INSTALL --retries 3 --timeout 120"
-
-    # Strategy 1: Primary — test PyPI directly first (avoids mirror lag)
-    pretty_print "  Strategy 1/5: pip install (PyPI)…" "${fg_cyan}"
-    if PIP_INDEX_URL="https://pypi.org/simple/" $_pip_base openviking 2>&1; then
-        _installed=true
-    fi
-
-    # Strategy 2: Retry with default mirror (works when PyPI is up but slow)
-    if ! $_installed; then
-        pretty_print "  Strategy 2/5: pip install (default mirror)…" "${fg_cyan}"
-        if $_pip_base openviking 2>&1; then
-            _installed=true
-        fi
-    fi
-
-    # Strategy 3: Install build deps + retry with --no-build-isolation
-    if ! $_installed; then
-        pretty_print "  Strategy 3/5: installing build deps & retrying…" "${fg_cyan}"
-        command -v gcc >/dev/null 2>&1 || apt-get install -y build-essential python3-dev 2>/dev/null || true
-        if $_pip_base --no-build-isolation openviking 2>&1; then
-            _installed=true
-        fi
-    fi
-
-    # Strategy 4: Install without deps first, then let pip resolve deps
-    if ! $_installed; then
-        pretty_print "  Strategy 4/5: pip install (no-deps + resolve)…" "${fg_cyan}"
-        if $_pip_base --no-deps openviking 2>&1 && $_pip_base openviking 2>&1; then
-            _installed=true
-        fi
-    fi
-
-    # Strategy 5: Try uv (faster pip alternative, handles PEP 668 natively)
-    if ! $_installed; then
-        pretty_print "  Strategy 5/5: trying uv…" "${fg_cyan}"
-        if command -v uv >/dev/null 2>&1 || pip install uv -q 2>/dev/null || curl -fsSL https://astral.sh/uv/install.sh | sh 2>/dev/null; then
-            if uv pip install --system openviking 2>&1; then
-                _installed=true
-            fi
-        fi
-    fi
-
-    if $_installed; then
-        pretty_print "openviking installed"
-        # Validate: confirm the import actually works with OV_PYTHON
-        if $OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null; then
-            local _ov_ver
-            _ov_ver=$($OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null)
-            pretty_print "OpenViking $_ov_ver verified — import OK" "${fg_green}"
-        else
-            pretty_print "⚠  openviking pip install claimed success but import failed" "${fg_red}"
-            pretty_print "  Run manually: $_pip_base --force-reinstall openviking" "${fg_yellow}"
-        fi
-    else
-        pretty_print "⚠  openviking install FAILED (all 5 strategies)" "${fg_red}"
-        pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
-        pretty_print "  Try manually: $_pip_base openviking" "${fg_yellow}"
-        pretty_print "  Or: PIP_INDEX_URL=https://pypi.org/simple/ $_pip_base openviking" "${fg_yellow}"
-    fi
-}
-
 # ---- DESC: Install Node.js (if missing) -------------------------------------
 function install_nodejs() {
     if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
@@ -564,7 +425,6 @@ function deploy_workspace() {
     local sn="${AGENT_NAME//\\/\\\\}"; sn="${sn//|/\|}"; sn="${sn//&/\\&}"
     sed -i "s|{{AGENT_NAME}}|$sn|g; s|{{AGENT_EMOJI}}|✨|g" IDENTITY.md
     sed -i "s|{{YOUR_NAME}}|friend|g; s|{{PREFERRED_NAME}}|friend|g; s|{{TIMEZONE}}|UTC|g" USER.md
-    chmod +x ov.py
     pretty_print "Workspace ready"
 }
 
@@ -576,11 +436,16 @@ function install_ollama_local() {
     mkdir -p "$dest/bin"
     export PATH="$dest/bin:$PATH"
 
-    $OV_PYTHON -c "import zstandard" 2>/dev/null || {
-        pretty_print "Installing zstandard for Ollama tarball…" "${fg_cyan}"
-        $PIP_INSTALL zstandard -q 2>&1 || true
-    }
+    # Try curl + tar with --zstd (modern tar supports this directly)
+    pretty_print "Downloading Ollama…" "${fg_cyan}"
+    if curl -fsL "$url" | tar --zstd -xC "$dest" 2>/dev/null; then
+        pretty_print "Ollama extracted to $dest/bin/"
+        return
+    fi
 
+    # Fall back to Python-based extraction
+    pretty_print "tar --zstd not available, using Python…" "${fg_yellow}"
+    pip install zstandard -q 2>/dev/null || true
     local dl_script="/tmp/_ollama_dl_$$.py"
     cat > "$dl_script" << 'PYEOF'
 import urllib.request, tarfile, zstandard, os, sys, stat
@@ -599,15 +464,15 @@ if os.path.exists(binpath):
     print(f"  Ollama binary at {binpath}")
 PYEOF
 
-    OLLAMA_URL="$url" OLLAMA_DEST="$dest" $OV_PYTHON "$dl_script" || true
+    OLLAMA_URL="$url" OLLAMA_DEST="$dest" python3 "$dl_script" || true
     rm -f "$dl_script"
 }
 
-# ---- DESC: Set up Ollama + OpenViking memory system --------------------------
-function setup_vector_memory() {
+# ---- DESC: Set up Ollama runtime (Mem0 uses it for embeddings) ---------------
+function setup_ollama() {
     echo ""
-    pretty_print "Core: Vector Memory (OpenViking)" "${ta_bold}"
-    pretty_print "The agent needs this to remember you across sessions." "${fg_cyan}"
+    pretty_print "Core: Ollama (Embeddings)" "${ta_bold}"
+    pretty_print "Mem0 uses Ollama for vector embeddings." "${fg_cyan}"
 
     if ! command -v ollama >/dev/null 2>&1; then
         pretty_print "Installing Ollama locally…" "${fg_cyan}"
@@ -636,72 +501,200 @@ function setup_vector_memory() {
         if curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
             pretty_print "Ollama running on localhost:11434"
 
-            # Pull primary embedding model: nomic-embed-text (8192 token context, 768 dim)
-            # This handles large files that all-minilm (512 ctx) can't process.
+            # Pull embedding model for Mem0: nomic-embed-text
             pretty_print "Pulling embedding model (nomic-embed-text)…" "${fg_cyan}"
             if ollama pull nomic-embed-text 2>&1; then
-                pretty_print "Primary embedding model ready (8192 ctx, 768 dim)"
+                pretty_print "Embedding model ready (8192 ctx, 768 dim)"
             else
                 pretty_print "First pull failed — retrying…" "${fg_yellow}"
                 sleep 3
                 if ollama pull nomic-embed-text 2>&1; then
-                    pretty_print "Primary embedding model ready (retry)"
+                    pretty_print "Embedding model ready (retry)"
                 else
                     pretty_print "Pull failed — run ollama pull nomic-embed-text later" "${fg_yellow}"
                 fi
             fi
-
-            # Pull legacy all-minilm for backward compatibility
-            pretty_print "Pulling legacy model (all-minilm)…" "${fg_cyan}"
-            ollama pull all-minilm 2>&1 || true
         else
             pretty_print "Ollama not reachable" "${fg_yellow}"
         fi
     else
         pretty_print "Ollama not found — install manually" "${fg_yellow}"
     fi
-
-    # Configure OpenViking
-    mkdir -p "$INSTALL_DIR/.openviking"
-    local ov_data_dir="$WORKSPACE_TARGET/.openviking"
-    mkdir -p "$ov_data_dir"
-    cat > "$INSTALL_DIR/.openviking/ov.conf" << OVCONF
-{
-  "storage": {
-    "workspace": "$ov_data_dir"
-  },
-  "embedding": {
-    "dense": {
-      "provider": "ollama",
-      "api_base": "http://127.0.0.1:11434/v1",
-      "model": "nomic-embed-text",
-      "dimension": 768
-    },
-    "max_input_tokens": 4096,
-    "max_concurrent": 2
-  },
-  "log": {
-    "level": "ERROR",
-    "output": "stdout"
-  }
 }
-OVCONF
-    pretty_print "OpenViking configured"
 
-    # Verify
-    if $OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null; then
-        local ov_ver
-        ov_ver=$($OV_PYTHON -c "import openviking; print(openviking.__version__)" 2>/dev/null)
-        if [[ -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
-            pretty_print "OpenViking $ov_ver installed and configured"
-        else
-            pretty_print "OpenViking $ov_ver installed (config pending)" "${fg_yellow}"
+# ---- DESC: Install Mem0 plugin for OpenClaw ----------------------------------
+function install_mem0_plugin() {
+    echo ""
+    pretty_print "Mem0 (Automatic Memory)" "${ta_bold}"
+    pretty_print "Installing @mem0/openclaw-mem0 plugin…" "${fg_cyan}"
+
+    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
+    if [[ ! -f "$oc_bin" ]]; then
+        oc_bin="$(command -v openclaw || true)"
+    fi
+    if [[ -z "$oc_bin" ]]; then
+        pretty_print "OpenClaw binary not found — can't install Mem0 plugin" "${fg_yellow}"
+        return
+    fi
+
+    local mem0_installed=false
+
+    # Primary install path
+    pretty_print "  Installing via openclaw plugins install…" "${fg_cyan}"
+    if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
+        mem0_installed=true
+    fi
+
+    # Fallback: npm install -g, then register with OpenClaw
+    if ! $mem0_installed; then
+        pretty_print "  Primary install failed — trying npm fallback…" "${fg_yellow}"
+        if npm install -g @mem0/openclaw-mem0 2>&1; then
+            pretty_print "  Package downloaded — registering with OpenClaw…" "${fg_cyan}"
+            if "$oc_bin" plugins install @mem0/openclaw-mem0 2>&1; then
+                mem0_installed=true
+            fi
         fi
     fi
 
-    pretty_print "  python3 ov.py find \"query\"  — search" "${fg_cyan}"
-    pretty_print "  python3 ov.py store \"fact\" — save" "${fg_cyan}"
-    pretty_print "  python3 ov.py status       — health" "${fg_cyan}"
+    if $mem0_installed; then
+        pretty_print "Mem0 plugin installed" "${fg_green}"
+    else
+        pretty_print "⚠  Mem0 plugin install FAILED" "${fg_red}"
+        pretty_print "  The agent won't have long-term memory until this is fixed." "${fg_red}"
+        pretty_print "  Try manually: openclaw plugins install @mem0/openclaw-mem0" "${fg_yellow}"
+        exit 1
+    fi
+}
+
+# ---- DESC: Configure Mem0 in openclaw.json -----------------------------------
+function configure_mem0() {
+    local config_path="$INSTALL_DIR/.openclaw/openclaw.json"
+
+    if [[ ! -f "$config_path" ]]; then
+        pretty_print "openclaw.json not found at $config_path — Mem0 config skipped" "${fg_yellow}"
+        return
+    fi
+
+    pretty_print "Configuring Mem0…" "${fg_cyan}"
+
+    # Generate random 6-char suffix for user ID
+    local rand_suffix="$(tr -dc a-z0-9 < /dev/urandom 2>/dev/null | head -c6 || echo "x$(date +%s | tail -c6)")"
+    local mem0_user_id="${AGENT_NAME}-${rand_suffix}"
+
+    # Determine LLM provider from user's choice during gather_identity
+    local mem0_llm_provider=""
+    local mem0_llm_model=""
+    local mem0_llm_key=""
+    case "$PROVIDER_IDX" in
+        1) mem0_llm_provider="deepseek";    mem0_llm_model="deepseek-chat";       mem0_llm_key="\${DEEPSEEK_API_KEY}";;
+        2) mem0_llm_provider="openai";      mem0_llm_model="gpt-5-mini";          mem0_llm_key="\${OPENAI_API_KEY}";;
+        3) mem0_llm_provider="anthropic";   mem0_llm_model="claude-sonnet-4-5-20250514"; mem0_llm_key="\${ANTHROPIC_API_KEY}";;
+        4) mem0_llm_provider="gemini";      mem0_llm_model="gemini-2.5-flash";    mem0_llm_key="\${GEMINI_API_KEY}";;
+        5) mem0_llm_provider="openrouter";  mem0_llm_model="openrouter/auto";     mem0_llm_key="\${OPENROUTER_API_KEY}";;
+        6) mem0_llm_provider="together";    mem0_llm_model="mistralai/Mixtral-8x7B-Instruct-v0.1"; mem0_llm_key="\${TOGETHER_API_KEY}";;
+        7) mem0_llm_provider="xai";         mem0_llm_model="grok-2";              mem0_llm_key="\${XAI_API_KEY}";;
+        8) mem0_llm_provider="mistral";     mem0_llm_model="mistral-large-latest"; mem0_llm_key="\${MISTRAL_API_KEY}";;
+        9) mem0_llm_provider="fireworks";   mem0_llm_model="accounts/fireworks/models/llama-v3p2-90b-vision-instruct"; mem0_llm_key="\${FIREWORKS_API_KEY}";;
+        *) mem0_llm_provider="ollama";      mem0_llm_model="qwen2.5:7b";          mem0_llm_key="";;
+    esac
+
+    # If user chose Ollama as their LLM provider, use the same model for Mem0 extraction
+    local chosen_model=""
+    if [[ "$PROVIDER_IDX" -eq 0 || -z "$PROVIDER_IDX" ]]; then
+        mem0_llm_provider="ollama"
+        mem0_llm_model="qwen2.5:7b"
+    else
+        # Try to extract the model from the OpenClaw config
+        chosen_model=$(python3 -c "
+import json
+with open('$config_path') as f:
+    c = json.load(f)
+provider = c.get('providers', {}).get('llm', {})
+print(provider.get('model', ''))
+" 2>/dev/null || true)
+        if [[ -z "$chosen_model" || "$chosen_model" == "None" ]]; then
+            chosen_model="qwen2.5:7b"
+        fi
+        if [[ "$mem0_llm_provider" == "ollama" ]]; then
+            mem0_llm_model="$chosen_model"
+        fi
+    fi
+
+    local db_path="$INSTALL_DIR/.mem0/vector_store.db"
+
+    # Use Python to patch the JSON config — handles all sections cleanly
+    python3 << PYEOF
+import json, os
+
+config_path = "$config_path"
+
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+# 1. Disable the bundled session-memory hook
+hooks = config.setdefault('hooks', {})
+internal = hooks.setdefault('internal', {})
+entries = internal.setdefault('entries', {})
+sm = entries.setdefault('session-memory', {})
+sm['enabled'] = False
+
+# 2. Configure plugins section
+plugins = config.setdefault('plugins', {})
+plugins['allow'] = ['mem0']
+plugins['slots'] = {'memory': 'openclaw-mem0'}
+
+# 3. Mem0 plugin entry with full config
+plugin_entries = plugins.setdefault('entries', {})
+plugin_entries['openclaw-mem0'] = {
+    'enabled': True,
+    'config': {
+        'mode': 'open-source',
+        'userId': '$mem0_user_id',
+        'autoCapture': True,
+        'autoRecall': True,
+        'topK': 5,
+        'skills': {
+            'triage': {'enabled': True},
+            'recall': {
+                'enabled': True,
+                'tokenBudget': 1500,
+                'rerank': True,
+                'keywordSearch': True,
+                'identityAlwaysInclude': True
+            },
+            'dream': {'enabled': True},
+            'domain': 'companion'
+        },
+        'oss': {
+            'embedder': {
+                'provider': 'ollama',
+                'config': {'model': 'nomic-embed-text'}
+            },
+            'vectorStore': {
+                'provider': 'memory',
+                'config': {'dbPath': '$db_path'}
+            },
+            'llm': {
+                'provider': '$mem0_llm_provider',
+                'config': {
+                    'model': '$mem0_llm_model',
+                    'apiKey': '$mem0_llm_key'
+                }
+            }
+        }
+    }
+}
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f"Mem0 configured: user_id=$mem0_user_id, llm=$mem0_llm_provider/$mem0_llm_model")
+PYEOF
+
+    # Create Mem0 data directory
+    mkdir -p "$INSTALL_DIR/.mem0"
+
+    pretty_print "Mem0 configuration written" "${fg_green}"
 }
 
 # ---- DESC: Deploy scripts and tools ------------------------------------------
@@ -712,45 +705,12 @@ function deploy_scripts() {
     cp "$INSTALL_DIR/scripts/repomap" "$tools_dir/repomap" 2>/dev/null || true
     chmod +x "$tools_dir/repomap" 2>/dev/null || true
 
-    # Deploy verify scripts to workspace (Bug #4 fix)
-    cp "$INSTALL_DIR/scripts/verify-openviking.sh" "$WORKSPACE_TARGET/" 2>/dev/null || true
-    cp "$INSTALL_DIR/scripts/verify-e2e.py" "$WORKSPACE_TARGET/" 2>/dev/null || true
-    chmod +x "$WORKSPACE_TARGET/verify-openviking.sh" 2>/dev/null || true
-
     # Install aider-chat (repomap dependency)
-    if $OV_PYTHON -c "import aider" 2>/dev/null; then
-        pretty_print "aider-chat already installed"
+    if pip3 install aider-chat -q 2>/dev/null || pip install aider-chat -q 2>/dev/null; then
+        pretty_print "aider-chat ready"
     else
-        pretty_print "Installing aider-chat (required by repomap)…" "${fg_cyan}"
-        $PIP_INSTALL aider-chat -q 2>&1 || pretty_print "aider-chat install failed" "${fg_yellow}"
+        pretty_print "aider-chat install skipped (not critical)" "${fg_yellow}"
     fi
-}
-
-
-# ---- DESC: Deploy auto-capture hook for passive OpenViking memory ------------
-function deploy_auto_capture_hook() {
-    pretty_print "Auto-Capture Hook" "${fg_cyan}"
-
-    local hook_src="$INSTALL_DIR/hooks/auto-capture-openviking"
-    local managed_hooks="$INSTALL_DIR/.openclaw/hooks"
-
-    if [[ ! -d "$hook_src" ]]; then
-        pretty_print "Hook source not found at $hook_src — clone the full repo with hooks/ directory" "${fg_red}"
-        exit 1
-    fi
-
-    mkdir -p "$managed_hooks"
-    # Copy hook files to managed directory.
-    # Use cp -rL to follow symlinks, then fix permissions:
-    # - Directories: 0755 (need +x to be searchable)
-    # - Files: 0644 (world-readable)
-    # chmod -R 0644 on a directory strips the +x bit, making it
-    # unsearchable, so we MUST do files and dirs separately.
-    cp -rL "$hook_src" "$managed_hooks/"
-    find "$managed_hooks/auto-capture-openviking/" -type d -exec chmod 0755 {} + 2>/dev/null || true
-    find "$managed_hooks/auto-capture-openviking/" -type f -exec chmod 0644 {} + 2>/dev/null || true
-
-    pretty_print "Auto-capture hook deployed to $managed_hooks/auto-capture-openviking/"
 }
 
 # ---- DESC: Bootstrap OpenClaw configuration ----------------------------------
@@ -825,31 +785,22 @@ PYEOF
 function init_health_state() {
     local health_file="$INSTALL_DIR/.openclaw/health-state.json"
     local ollama_status="down"
-    local openviking_status="down"
-    local model_status="down"
+    local mem0_status="down"
     local disk_pct
 
     curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && ollama_status="ok"
 
-    local openviking_reason=""
-    if [[ "$ollama_status" = "ok" ]]; then
-        cd "$WORKSPACE_TARGET" 2>/dev/null
-        if $OV_PYTHON -c "import openviking" 2>/dev/null; then
-            if [[ -f "$INSTALL_DIR/.openviking/ov.conf" ]]; then
-                openviking_status="ok"
-            else
-                openviking_reason="missing_config"
-            fi
-        else
-            openviking_reason="package_not_installed"
-        fi
-        if [[ ! -d "$WORKSPACE_TARGET/.openviking" ]]; then
-            openviking_reason="missing_data_dir"
-        fi
-        ollama list 2>&1 | grep -q nomic-embed-text && model_status="ok"
-    else
-        openviking_reason="ollama_down"
+    # Check Mem0 status via OpenClaw CLI
+    local oc_bin="$INSTALL_DIR/.local/bin/openclaw"
+    if [[ ! -f "$oc_bin" ]]; then
+        oc_bin="$(command -v openclaw || true)"
     fi
+    if [[ -n "$oc_bin" ]]; then
+        if "$oc_bin" mem0 status >/dev/null 2>&1; then
+            mem0_status="ok"
+        fi
+    fi
+
     disk_pct=$(df -h "$HOME" | awk 'NR==2 {print $5}' | sed 's/%//')
 
     mkdir -p "$(dirname "$health_file")"
@@ -857,8 +808,7 @@ function init_health_state() {
 {
   "last_checked": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "ollama": { "status": "$ollama_status" },
-  "openviking": { "status": "$openviking_status", "reason": "$openviking_reason" },
-  "all_minilm": { "status": "$model_status" },
+  "mem0": { "status": "$mem0_status" },
   "disk": { "status": "ok", "usage_pct": $disk_pct }
 }
 EOF
@@ -878,13 +828,9 @@ export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
 export OPENCLAW_WORKSPACE_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
 export npm_config_cache="$(pwd)/.npm-cache"
-# Add venv python to PATH if it exists (so python3 uses the venv interpreter)
-if [[ -d "$(pwd)/.openclaw/venv/bin" ]]; then
-    export PATH="$(pwd)/.openclaw/venv/bin:$PATH"
-fi
-# OpenViking: make py-libs importable + point config file to project-local copy
-export PYTHONPATH="$(pwd)/.openclaw/py-libs:${PYTHONPATH:-}"
-export OPENVIKING_CONFIG_FILE="$(pwd)/.openviking/ov.conf"
+
+# Mem0 data directory
+export MEM0_DIR="$(pwd)/.mem0"
 
 # Look for openclaw in local install dir, then system PATH
 OPENCLAW_BIN="$(pwd)/.local/bin/openclaw"
@@ -924,34 +870,7 @@ function cleanup_portable() {
 }
 
 # ---- DESC: Create HOME symlinks for library compat (post-cleanup) -------------
-function setup_home_symlinks() {
-    # (HOME symlinks removed — everything stays in INSTALL_DIR)
 
-    # Patch ov.py shebang to use venv python (Bug: was using system python3)
-    if [[ -f "$WORKSPACE_TARGET/ov.py" ]] && [[ "$OV_PYTHON" != "python3" ]]; then
-        sed -i "1s|.*|#!$OV_PYTHON|" "$WORKSPACE_TARGET/ov.py"
-        pretty_print "ov.py shebang patched to venv python" "${fg_cyan}"
-    fi
-
-    # Symlink ov.py onto PATH so users can run it from anywhere
-    local ov_symlink="$INSTALL_DIR/.local/bin/ov.py"
-    if [[ -f "$WORKSPACE_TARGET/ov.py" ]]; then
-        ln -sf "$WORKSPACE_TARGET/ov.py" "$ov_symlink"
-        chmod +x "$ov_symlink"
-        pretty_print "ov.py symlinked to PATH: $ov_symlink" "${fg_cyan}"
-    fi
-
-    # Index memory if empty (Bug #5 fix)
-    local ov_data="$WORKSPACE_TARGET/.openviking"
-    if [[ -d "$ov_data" && -z "$(ls -A "$ov_data" 2>/dev/null)" ]]; then
-        if "$OV_PYTHON" -c "import openviking" 2>/dev/null; then
-            pretty_print "Indexing initial workspace memory…" "${fg_cyan}"
-            cd "$WORKSPACE_TARGET" 2>/dev/null && OPENVIKING_CONFIG_FILE="$INSTALL_DIR/.openviking/ov.conf" "$OV_PYTHON" ov.py index 2>&1 || true
-            cd "$orig_cwd"
-            pretty_print "Initial memory index complete"
-        fi
-    fi
-}
 
 function main() {
     trap script_trap_err ERR
@@ -990,39 +909,18 @@ function main() {
     fi
 
     check_prerequisites
-    detect_distro
-    bootstrap_pip
-    setup_pip_install
-
-    # Pick the right python (venv if bootstrap_pip created one, system otherwise)
-    OV_PYTHON="python3"
-    local ov_venv_detect="$INSTALL_DIR/.openclaw/venv"
-    if [[ -f "$ov_venv_detect/bin/python3" ]]; then
-        OV_PYTHON="$ov_venv_detect/bin/python3"
-        pretty_print "Using venv python for OpenViking" "${fg_cyan}"
-    fi
-
-    install_openviking_pkg
     install_nodejs
     install_openclaw
     gather_identity
     deploy_workspace
-    setup_vector_memory
+    setup_ollama
+    install_mem0_plugin
     deploy_scripts
-    deploy_auto_capture_hook
     bootstrap_openclaw
-    # Auto-enable the auto-capture hook
-    export OPENCLAW_STATE_DIR="$INSTALL_DIR/.openclaw"
-    export OPENCLAW_DIR="$WORKSPACE_TARGET"
-    if "$INSTALL_DIR/.local/bin/openclaw" hooks enable auto-capture-openviking 2>&1; then
-        pretty_print "Auto-capture hook enabled"
-    else
-        pretty_print "Could not auto-enable hook — run manually: openclaw hooks enable auto-capture-openviking" "${fg_yellow}"
-    fi
+    configure_mem0
     init_health_state
     write_run_script
     cleanup_portable
-    setup_home_symlinks
 
     # Mark setup as complete
     touch "$INSTALL_DIR/.setup-complete"

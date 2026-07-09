@@ -1,7 +1,6 @@
 {
   "last_checked": "never",
   "ollama": { "status": "unknown" },
-  "openviking": { "status": "unknown" },
-  "all_minilm": { "status": "unknown" },
+  "mem0": { "status": "unknown" },
   "disk": { "status": "unknown" }
 }

@@ -7,11 +7,8 @@ export OPENCLAW_DIR="$(pwd)/.openclaw/workspace"
 export OPENCLAW_WORKSPACE_DIR="$(pwd)/.openclaw/workspace"
 export PATH="$(pwd)/.local/bin:$PATH"
 export npm_config_cache="$(pwd)/.npm-cache"
-if [[ -d "$(pwd)/.openclaw/venv/bin" ]]; then
-    export PATH="$(pwd)/.openclaw/venv/bin:$PATH"
-fi
-export PYTHONPATH="$(pwd)/.openclaw/py-libs:${PYTHONPATH:-}"
-export OPENVIKING_CONFIG_FILE="$(pwd)/.openviking/ov.conf"
+# Mem0 data directory
+export MEM0_DIR="$(pwd)/.mem0"
 
 OPENCLAW_BIN="$(pwd)/.local/bin/openclaw"
 if [[ ! -f "$OPENCLAW_BIN" ]]; then

@@ -80,10 +80,10 @@ my-agent/
 ├── README.md
 ├── .local/bin/         # node, npm, openclaw (local binaries)
 ├── .openclaw/          # OpenClaw config, workspace, tools, health state
-│   ├── workspace/      # Agent workspace (AGENTS.md, SOUL.md, ov.py, memory)
+│   ├── workspace/      # Agent workspace (AGENTS.md, SOUL.md, memory)
 │   ├── tools/          # repomap and other tools
 │   └── health-state.json
-├── .openviking/        # OpenViking vector store config + data
+├── .mem0/              # Mem0 vector store (SQLite)
 ├── scripts/            # Helper scripts
 ├── workspace/          # Source workspace template
 ├── diagnostics/
@@ -102,18 +102,16 @@ workspace/                    (inside .openclaw/)
 ├── SOUL.md                   # Personality — direct, helpful, no filler
 ├── IDENTITY.md               # Your agent's name, emoji, self-description
 ├── USER.md                   # Who you are — name, timezone, preferences
-├── TOOLS.md                  # Local infra — OpenViking, RepoMap
+├── TOOLS.md                  # Local infra
 ├── HEARTBEAT.md              # Periodic health checks, memory maintenance tasks
 ├── MEMORY.md                 # Curated long-term memory index (agent-maintained)
-├── ov.py                     # OpenViking CLI — semantic vector memory
 ├── memory/                   # Daily session logs
-└── .openviking/              # Vector store data
 
 scripts/
 ├── repomap                   # Codebase understanding (tree-sitter + PageRank)
 ├── setup-warp-oss.sh         # Warp OSS builder (remote)
 ├── build-warp.sh             # Warp OSS builder (local)
-└── verify-openviking.sh      # Memory health check
+└── .openclaw/health-state.json  # Service health state
 
 diagnostics/
 └── agent-diagnostic-prompt.md  # Full health check prompt
@@ -128,33 +126,30 @@ reports anything that's down:
 > "Btw, Ollama isn't running — starting it now."
 > "Disk is getting full."
 
-Ask "how do you feel?" and it runs a live scan of Ollama, OpenViking, embeddings
-model, disk space, and RepoMap — then reports structured status for
+Ask "how do you feel?" and it runs a live scan of Ollama, Mem0, disk
+space, and RepoMap — then reports structured status for
 each. It reads health-state.json and reports actual service statuses — this is part of its identity in SOUL.md, not a checklist task.
 
 ## Memory — cross-session, persistent
 
-Vector database powered by **Ollama + all-minilm**. Install flow:
+Auto-capturing memory powered by **Mem0 + Ollama**.
 
 1. Ollama installed without sudo
-2. Service confirmed running BEFORE model is pulled (fixes silent failure)
-3. `all-minilm` model pulled with automatic retry if first attempt fails
-4. `ov.py` config written, storage directory created
-5. OpenViking import + config verified
-
-`ov.py` is on PATH after setup (symlinked to `.local/bin/ov.py`):
+2. Service confirmed running BEFORE model is pulled
+3. `nomic-embed-text` model pulled for embeddings
+4. `@mem0/openclaw-mem0` plugin installed and configured
+5. Every message automatically captured and recalled
 
 ```bash
 cd /path/to/install/dir
-. .local/bin/ov.py find "what were we working on last week"
-. .local/bin/ov.py store "decided to use Postgres for the new project"
-. .local/bin/ov.py status
+./run.sh mem0 search "what were we working on last week" --user-id <agent-name>
+./run.sh mem0 list --user-id <agent-name>
 ```
 
-Or, from inside the install dir via the full path:
+Or, from inside the install dir:
 
 ```bash
-./.local/bin/ov.py find "query"
+./run.sh mem0 search "query" --user-id <agent-name>
 ```
 
 ## Behavioral guardrails
