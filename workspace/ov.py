@@ -28,7 +28,24 @@ from functools import wraps
 # Determine OpenViking data directory and workspace root, respecting all env vars
 WORKSPACE = os.environ.get("OPENCLAW_DIR", os.path.expanduser("~/.openclaw/workspace"))
 _ov_config_file = os.environ.get("OPENVIKING_CONFIG_FILE", "")
+
+# Auto-discover ov.conf: if not set via env, search relative to this script
+if not _ov_config_file or not os.path.isfile(_ov_config_file):
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    _candidates = [
+        os.path.join(_script_dir, "..", ".openviking", "ov.conf"),
+        os.path.join(_script_dir, "..", "..", ".openviking", "ov.conf"),
+        os.path.join(WORKSPACE, "..", ".openviking", "ov.conf"),
+        os.path.join(os.path.expanduser("~/.openclaw/workspace"), "..", ".openviking", "ov.conf"),
+    ]
+    for _cand in _candidates:
+        _norm = os.path.normpath(_cand)
+        if os.path.isfile(_norm):
+            _ov_config_file = _norm
+            break
+
 if _ov_config_file and os.path.isfile(_ov_config_file):
+    os.environ["OPENVIKING_CONFIG_FILE"] = _ov_config_file
     try:
         with open(_ov_config_file) as _f:
             _cfg = json.load(_f)
@@ -372,7 +389,7 @@ def cmd_status(args):
     print(f"  Index file size limit: {MAX_INDEX_FILE_SIZE//1024} KB")
 
 def cmd_repomap(args):
-    """Generate Aider-style structural code map."""
+    """Generate structural code map using built-in tree-sitter."""
     if not args:
         print("Usage: ov.py repomap <directory> [map_tokens]")
         return
@@ -380,60 +397,19 @@ def cmd_repomap(args):
     target = os.path.abspath(args[0])
     map_tokens = int(args[1]) if len(args) > 1 else 4096
     
-    if not os.path.isdir(target):
-        print(f"Directory not found: {target}")
-        return
+    _repomap_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "repomap")
+    _repomap_script = os.path.normpath(_repomap_script)
     
-    try:
-        from aider.repomap import RepoMap
-        from aider.io import InputOutput
-        from aider.models import Model
-    except ImportError:
-        print("Aider not installed. Run: pip install --break-system-packages aider-chat")
-        return
-    
-    # Find git root for proper path resolution
-    git_root = None
-    check = target
-    while check and check != '/':
-        if os.path.isdir(os.path.join(check, '.git')):
-            git_root = check
-            break
-        check = os.path.dirname(check)
-    
-    effective_root = git_root or target
-    exts = {'.py', '.ts', '.js', '.tsx', '.jsx', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp', '.rb', '.php', '.swift', '.kt', '.scala', '.cs'}
-    all_files = []
-    
-    for root, dirs, files in os.walk(target):
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('node_modules', 'venv', '__pycache__', '.git', 'target', 'build', 'dist')]
-        for f in files:
-            if any(f.endswith(e) for e in exts):
-                rel = os.path.relpath(os.path.join(root, f), effective_root)
-                all_files.append(rel)
-    
-    if not all_files:
-        print("No recognized code files found")
-        return
-    
-    all_files = sorted(all_files)
-    print(f"Scanning {len(all_files)} code files at {effective_root} (git={'yes' if git_root else 'no'})", flush=True)
-    
-    orig_cwd = os.getcwd()
-    os.chdir(effective_root)
-    
-    rm = RepoMap(root=effective_root, map_tokens=map_tokens, main_model=Model("deepseek/deepseek-chat"), io=InputOutput())
-    mid = min(len(all_files) // 2, 80)
-    rmap = rm.get_repo_map(chat_files=all_files[:mid], other_files=all_files[mid:mid+80], force_refresh=True)
-    os.chdir(orig_cwd)
-    
-    if rmap and rmap.strip():
-        print(f"\n{'='*60}", flush=True)
-        print(f"REPO MAP: {target}")
-        print(f"{'='*60}\n", flush=True)
-        print(rmap, flush=True)
+    if os.path.isfile(_repomap_script):
+        result = subprocess.run(
+            [sys.executable, _repomap_script, target, str(map_tokens)],
+            capture_output=True, text=True, timeout=60
+        )
+        print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
     else:
-        print("No generated map")
+        print(f"repomap tool not found at {_repomap_script}")
 
 commands = {
     "find": cmd_find,

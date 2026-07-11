@@ -1,88 +1,115 @@
 #!/usr/bin/env python3
-"""RepoMap tool — generates Aider-style structural code maps.
-Uses tree-sitter AST parsing + PageRank to map any codebase.
-Installed at ~/.openclaw/tools/repomap by setup.sh.
+"""RepoMap tool — generates structural code maps using tree-sitter AST parsing.
+Uses the openviking-installed tree-sitter (already in venv).
 Usage: repomap <directory> [map_tokens]
 """
 
-import os, sys
+import os
+import sys
+
 sys.stdout.reconfigure(line_buffering=True)
+
+LANGUAGE_MAP = {
+    ".py":  ("python",     ["(function_definition name: (identifier) @name)",
+                            "(class_definition name: (identifier) @name)"]),
+    ".ts":  ("typescript", ["(function_declaration name: (identifier) @name)",
+                            "(class_declaration name: (type_identifier) @name)"]),
+    ".tsx": ("tsx",        ["(function_declaration name: (identifier) @name)"]),
+    ".js":  ("javascript", ["(function_declaration name: (identifier) @name)",
+                            "(class_declaration name: (type_identifier) @name)"]),
+    ".go":  ("go",         ["(function_declaration name: (identifier) @name)",
+                            "(type_declaration (type_spec name: (type_identifier) @name))"]),
+    ".rs":  ("rust",       ["(function_item name: (identifier) @name)",
+                            "(struct_item name: (type_identifier) @name)"]),
+    ".java":("java",       ["(method_declaration name: (identifier) @name)",
+                            "(class_declaration name: (identifier) @name)"]),
+    ".c":   ("c",          ["(function_definition declarator: (function_declarator declarator: (identifier) @name))"]),
+    ".cpp": ("cpp",        ["(function_definition declarator: (function_declarator declarator: (identifier) @name))"]),
+    ".rb":  ("ruby",       ["(method name: (identifier) @name)"]),
+    ".php": ("php",        ["(function_definition name: (name) @name)"]),
+    ".cs":  ("c_sharp",    ["(method_declaration name: (identifier) @name)"]),
+}
+
+
+def parse_file(filepath):
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext not in LANGUAGE_MAP:
+        return None
+    lang_name, queries = LANGUAGE_MAP[ext]
+    try:
+        import tree_sitter as ts
+        import importlib
+        lang_module = importlib.import_module(f"tree_sitter_{lang_name}")
+        lang_obj = lang_module.language()
+    except ImportError:
+        return _naive_parse(filepath, ext)
+    try:
+        parser = ts.Parser(lang_obj)
+        with open(filepath, "rb") as f:
+            source = f.read()
+        tree = parser.parse(source)
+        symbols = []
+        for query_str in queries:
+            query = ts.Query(lang_obj, query_str)
+            captures = query.captures(tree.root_node)
+            for node, tag in captures:
+                name = node.text.decode("utf-8", errors="replace")
+                line = node.start_point[0] + 1
+                symbols.append(f"  {tag:<20} {name:<40} line {line}")
+        return symbols if symbols else None
+    except Exception:
+        return _naive_parse(filepath, ext)
+
+
+def _naive_parse(filepath, ext):
+    symbols = []
+    try:
+        with open(filepath, "r", errors="replace") as f:
+            for i, line in enumerate(f, 1):
+                stripped = line.strip()
+                if ext == ".py":
+                    if stripped.startswith(("def ", "class ", "async def ")):
+                        name = stripped.split("(")[0].replace("def ", "").replace("class ", "").replace("async ", "").strip().rstrip(":")
+                        symbols.append(f"  def/class {name:<40} line {i}")
+    except (UnicodeDecodeError, OSError):
+        pass
+    return symbols if symbols else None
 
 
 def repomap(target, map_tokens=4096):
     target = os.path.abspath(target)
     if not os.path.isdir(target):
         return f"Directory not found: {target}"
-
-    try:
-        from aider.repomap import RepoMap
-        from aider.io import InputOutput
-        from aider.models import Model
-    except ImportError:
-        return (
-            "Aider not installed. Run: pip install --break-system-packages aider-chat"
-        )
-
-    # Find git root for proper path resolution
-    git_root = None
-    check = target
-    while check and check != "/":
-        if os.path.isdir(os.path.join(check, ".git")):
-            git_root = check
-            break
-        check = os.path.dirname(check)
-
-    effective_root = git_root or target
-    exts = {
-        ".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs",
-        ".java", ".c", ".cpp", ".h", ".hpp", ".rb", ".php",
-        ".swift", ".kt", ".scala", ".cs", ".sh", ".md",
-    }
+    exts = set(LANGUAGE_MAP.keys())
     all_files = []
-
     for root, dirs, files in os.walk(target):
-        dirs[:] = [
-            d
-            for d in dirs
-            if not d.startswith(".")
-            and d not in ("node_modules", "venv", "__pycache__", ".git", "target", "build", "dist")
-        ]
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "venv", "__pycache__", ".git", "target", "build", "dist")]
         for f in files:
             if any(f.endswith(e) for e in exts):
-                rel = os.path.relpath(os.path.join(root, f), effective_root)
-                all_files.append(rel)
-
+                all_files.append(os.path.join(root, f))
     if not all_files:
         return "No recognized code files found"
-
-    all_files = sorted(all_files)
-    orig_cwd = os.getcwd()
-    os.chdir(effective_root)
-
-    rm = RepoMap(
-        root=effective_root,
-        map_tokens=map_tokens,
-        main_model=Model("deepseek/deepseek-chat"),
-        io=InputOutput(),
-    )
-    mid = min(len(all_files) // 2, 80)
-    rmap = rm.get_repo_map(
-        chat_files=all_files[:mid],
-        other_files=all_files[mid : mid + 80],
-        force_refresh=True,
-    )
-    os.chdir(orig_cwd)
-
-    if rmap and rmap.strip():
-        return rmap
-    return "(no map generated — codebase may be too small or all config files)"
+    all_files.sort()
+    print(f"Scanning {len(all_files)} code files at {target}", flush=True)
+    output_lines = [f"REPO MAP: {target}", ""]
+    total_symbols = 0
+    for filepath in all_files:
+        rel = os.path.relpath(filepath, target)
+        symbols = parse_file(filepath)
+        if symbols:
+            output_lines.append(f"\n{rel}:")
+            output_lines.extend(symbols)
+            total_symbols += len(symbols)
+    if total_symbols == 0:
+        return "(no symbols found)"
+    output_lines.append(f"\n{total_symbols} symbols in {len(all_files)} files")
+    return "\n".join(output_lines)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: repomap <directory> [map_tokens]")
         sys.exit(0)
-
     target = sys.argv[1]
     tokens = int(sys.argv[2]) if len(sys.argv) > 2 else 4096
     result = repomap(target, tokens)

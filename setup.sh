@@ -717,13 +717,7 @@ function deploy_scripts() {
     cp "$INSTALL_DIR/scripts/verify-e2e.py" "$WORKSPACE_TARGET/" 2>/dev/null || true
     chmod +x "$WORKSPACE_TARGET/verify-openviking.sh" 2>/dev/null || true
 
-    # Install aider-chat (repomap dependency)
-    if $OV_PYTHON -c "import aider" 2>/dev/null; then
-        pretty_print "aider-chat already installed"
-    else
-        pretty_print "Installing aider-chat (required by repomap)…" "${fg_cyan}"
-        $PIP_INSTALL aider-chat -q 2>&1 || pretty_print "aider-chat install failed" "${fg_yellow}"
-    fi
+    # repomap no longer needs aider-chat — uses built-in tree-sitter from openviking
 }
 
 

@@ -175,7 +175,7 @@ tree-sitter AST parsing and PageRank ranking. Supports Python, TypeScript,
 JavaScript, Go, Rust, Java, C++, Shell, Markdown, and more.
 
 The `repomap` tool is at `.openclaw/tools/repomap` inside your install
-directory. Dependency `aider-chat` is installed during setup.
+directory. Uses tree-sitter from the OpenViking venv — no extra dependency.
 
 ## Setup script
 
